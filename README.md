@@ -6,6 +6,8 @@ Touch the glass and a ripple spreads through something thick and dark. The first
 
 The liquid is a vacuum. Where its waves pile up, pairs of quicksilver drops rise out of it and, if nobody looks, sink back as though they had never been. Touching a drop is an observation: the pair becomes real. One drop spirals down past the crystal's horizon and feeds it; the other escapes and is heard. Touching empty liquid observes nothing and unsettles the pairs nearby.
 
+A hopper grows as a frame round nothing: every finished one opens an empty pit. A drop that falls in settles into the next empty pit as a qubit, a small cube of light. Qubits take their colour from the spectrum in the order they arrive, so the cluster reads as a rainbow of its own history.
+
 The crystal breathes, and pairs rise on the breath. An observation made on the breath counts twice and rings a deep bell. As the crystal gains mass, it starts to bend the liquid round itself like a lens.
 
 There are no numbers on the screen. What you have gathered is heard, not read: a low string beneath everything sinks as resonance gathers and thickens as the crystal grows.

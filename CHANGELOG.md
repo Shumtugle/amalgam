@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3 — 2026-10-17
+
+Space and qubits.
+
+- Every finished hopper opens an empty pit. A drop that falls past the horizon settles into the next empty pit as a qubit: a small cube of its own light.
+- Qubits take their colour from the spectrum in the order they arrive, red first, violet last: the crystal shows its own history.
+- Each new qubit rings the next note of a scale that climbs with the spectrum.
+- Drops are bigger and easier to touch.
+
 ## 0.2 — 2026-10-17
 
 The observer.

@@ -14,7 +14,7 @@ final class Save {
         long seed;
         boolean planted;
         float u, v, grown, pool, resonance;
-        int settled;
+        int settled, qubits;
         /** Seconds since the game was saved. */
         float away;
     }
@@ -32,6 +32,7 @@ final class Save {
         s.u = p.getFloat("u", 0.5f);
         s.v = p.getFloat("v", 0.5f);
         s.settled = p.getInt("settled", 0);
+        s.qubits = p.getInt("qubits", 0);
         s.grown = p.getFloat("grown", 0f);
         s.pool = p.getFloat("pool", 0f);
         s.resonance = p.getFloat("resonance", 0f);
@@ -50,6 +51,7 @@ final class Save {
             e.putFloat("u", w.seedU);
             e.putFloat("v", w.seedV);
             e.putInt("settled", k.settledCount());
+            e.putInt("qubits", k.qubits);
             e.putFloat("grown", k.active != null ? k.active.grown : 1f);
             e.putFloat("pool", w.pool);
             e.putFloat("resonance", w.resonance);

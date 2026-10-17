@@ -11,8 +11,23 @@ uniform float uPulse;   // breath, peaks on the beat
 uniform float uFlash;   // after a resonant touch
 uniform float uFilm;
 
+// A rainbow from red to violet; the spectrum is the clock of a cycle.
+vec3 spectrum(float h) {
+    float x = h * 0.8;
+    vec3 c = clamp(abs(mod(x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    return c * c * (3.0 - 2.0 * c);
+}
+
 void main() {
     vec3 n = normalize(vN);
+    if (vTag.y > 2.5) {
+        // a qubit: light of its own, brighter towards the edges of each face
+        vec3 v = normalize(uEye - vW);
+        float c = clamp(dot(n, v), 0.0, 1.0);
+        vec3 q = spectrum(vTag.x) * (1.1 + 0.7 * uPulse + 0.6 * pow(1.0 - c, 2.0));
+        o = vec4(tonemap(q * 1.6), 1.0);
+        return;
+    }
     vec3 v = normalize(uEye - vW);
     float c = clamp(dot(n, v), 0.0, 1.0);
     vec3 r = reflect(-v, n);

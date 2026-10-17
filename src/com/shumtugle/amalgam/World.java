@@ -28,16 +28,16 @@ final class World {
     static final float GROWTH_RATE = 1.1f;
 
     static final int EV_PLANT = 1, EV_OBSERVE = 2, EV_OBSERVE_ON_BEAT = 3, EV_MISS = 4,
-            EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7;
+            EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8;
 
     // virtual pairs
     static final int MAX_PAIRS = 5;
     /** Lifetime of an unobserved pair, seconds. */
     private static final float PAIR_LIFE = 1.9f;
     /** Widest gap between the two drops of a pair, and the drop radius, in space units. */
-    private static final float PAIR_GAP = 0.06f, DROP = 0.03f;
+    private static final float PAIR_GAP = 0.085f, DROP = 0.048f;
     /** A touch this close to a drop observes it. Generous: a fingertip is wide. */
-    private static final float HIT = 0.08f;
+    private static final float HIT = 0.11f;
     /** A touch on empty liquid unsettles pairs this close. */
     private static final float DECOHERE = 0.3f;
     /** Height a wave must pile up to before a pair can rise from it unprompted. */
@@ -123,9 +123,9 @@ final class World {
      * Brings back a saved game. Away is how long the game was closed, in seconds;
      * the crystal grew a little by itself meanwhile.
      */
-    void restore(float u, float v, int settled, float grown, float savedPool, float savedResonance, float away) {
+    void restore(float u, float v, int settled, float grown, int qubits, float savedPool, float savedResonance, float away) {
         plant(u, v);
-        crystal.restore(settled, grown);
+        crystal.restore(settled, grown, qubits);
         pool = savedPool + Math.min(AWAY_CAP, Math.max(0f, away) * TRICKLE);
         resonance = savedResonance;
         crystal.middle(mid);
@@ -346,11 +346,11 @@ final class World {
 
     private boolean roomFor(float x, float y) {
         if (x < 0.08f || x > 0.92f || y < 0.08f || y > aspect - 0.08f) return false;
-        if (x > box[0] - 0.06f && x < box[2] + 0.06f && y > box[1] - 0.06f && y < box[3] + 0.06f) return false;
+        if (x > box[0] - 0.08f && x < box[2] + 0.08f && y > box[1] - 0.08f && y < box[3] + 0.08f) return false;
         for (int i = 0; i < MAX_PAIRS; i++) {
             if (!pon[i]) continue;
             float dx = px[i] - x, dy = py[i] - y;
-            if (dx * dx + dy * dy < 0.12f * 0.12f) return false;
+            if (dx * dx + dy * dy < 0.2f * 0.2f) return false;
         }
         return true;
     }
@@ -387,7 +387,7 @@ final class World {
                     pool += fval[j];
                     flash = Math.max(flash, 0.6f);
                     liquid.press(crystalU(), crystalV(), 3.5f, 0.6f);
-                    event(EV_ABSORB);
+                    event(crystal.seat() ? EV_QUBIT : EV_ABSORB);
                     continue;
                 }
             } else {

@@ -106,6 +106,16 @@ public final class MainActivity extends Activity {
                 sound.strike(LOW * 1.5f, 0.28f, 0.8f);
                 tick();
                 break;
+            case World.EV_QUBIT: {
+                // each new qubit is the next note of a scale that climbs with the spectrum
+                int k = w.crystal.qubits - 1;
+                int step = k * SCALE.length * 2 / Crystal.MAX_HOPPERS;
+                float f = SCALE[step % SCALE.length] * (step >= SCALE.length ? 2f : 1f);
+                sound.strike(f, 0.4f, 1.6f);
+                sound.strike(LOW * 1.5f, 0.2f, 0.8f);
+                tick();
+                break;
+            }
             case World.EV_BREATH:
                 // the breath must be heard, or nobody can look on it
                 sound.strike(LOW, 0.16f, 0.6f);

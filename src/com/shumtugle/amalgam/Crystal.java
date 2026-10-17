@@ -16,7 +16,7 @@ final class Crystal {
     static final int MAX_HOPPERS = 48;
     static final int MAX_RINGS = 6;
     /** Vertices one hopper can produce: a slab plus four boxes per ring, 36 vertices a box. */
-    static final int HOPPER_VERTS = (1 + 4 * MAX_RINGS) * 36;
+    static final int HOPPER_VERTS = (2 + 4 * MAX_RINGS) * 36;
 
     static final class Hopper {
         /** Local frame in cluster space: right, up, forward, origin. Origin sits on the base. */
@@ -44,6 +44,11 @@ final class Crystal {
     Hopper active;
     /** Bumped every time a hopper finishes, so the renderer knows to rebuild settled geometry. */
     int settledVersion;
+    /**
+     * Qubits seated so far. Qubit i sits in the pit of hopper i, and its colour is its place
+     * in the spectrum: the first is red, the last of a full cycle violet.
+     */
+    int qubits;
 
     Crystal(long seed) {
         rnd = new Random(seed);
@@ -66,13 +71,30 @@ final class Crystal {
      * Rebuilds a saved cluster: the same seed gives the same hoppers in the same order,
      * so the count of finished ones and the growth of the last one are enough.
      */
-    void restore(int settled, float grown) {
+    void restore(int settled, float grown, int seated) {
         while (settledCount() < settled && active != null) {
             active.grown = 1f;
             settledVersion++;
             active = hoppers.size() < MAX_HOPPERS ? spawn() : null;
         }
         if (active != null) active.grown = Math.max(0f, Math.min(0.999f, grown));
+        qubits = Math.max(0, Math.min(seated, settledCount()));
+    }
+
+    /**
+     * Seats a qubit in the next empty pit, if a finished hopper has one waiting.
+     * Returns whether it found a place.
+     */
+    boolean seat() {
+        if (qubits >= settledCount()) return false;
+        qubits++;
+        settledVersion++;
+        return true;
+    }
+
+    /** Place of qubit i in the spectrum, 0 for red to 1 for violet. */
+    static float hue(int i) {
+        return Math.min(1f, i / (float) (MAX_HOPPERS - 1));
     }
 
     /** Sum of size squared times growth: how much crystal there is. */
@@ -219,7 +241,7 @@ final class Crystal {
         int v = 0;
         for (int i = 0; i < hoppers.size(); i++) {
             Hopper h = hoppers.get(i);
-            if (h != active) v = emitHopper(h, out, v);
+            if (h != active) v = emitHopper(h, i, out, v);
         }
         return v;
     }
@@ -227,16 +249,16 @@ final class Crystal {
     /** Writes every hopper, growing or not; returns the vertex count. */
     int buildAll(float[] out) {
         int v = 0;
-        for (int i = 0; i < hoppers.size(); i++) v = emitHopper(hoppers.get(i), out, v);
+        for (int i = 0; i < hoppers.size(); i++) v = emitHopper(hoppers.get(i), i, out, v);
         return v;
     }
 
     /** Writes only the hopper still growing; returns the vertex count. */
     int buildActive(float[] out) {
-        return active == null ? 0 : emitHopper(active, out, 0);
+        return active == null ? 0 : emitHopper(active, hoppers.size() - 1, out, 0);
     }
 
-    private int emitHopper(Hopper h, float[] out, int v) {
+    private int emitHopper(Hopper h, int index, float[] out, int v) {
         float g = ease(h.grown);
         if (g <= 0.001f) return v;
         float s = h.size * g;
@@ -256,8 +278,17 @@ final class Crystal {
             v = box(out, v, h.f, a - w, hy, 0, w, hy, a - t, film, shade);
             v = box(out, v, h.f, -(a - w), hy, 0, w, hy, a - t, film, shade);
         }
+        if (index < qubits && h != active) {
+            // the qubit rests on the lowest ring, in the pit, peeking over the next wall
+            float floor = base + step * (1f + h.jitter[h.rings - 1]);
+            float q = t * 0.55f;
+            v = box(out, v, h.f, 0, floor + q, 0, q, q, q, hue(index), QUBIT);
+        }
         return v;
     }
+
+    /** Shade value that tells the shader a face belongs to a qubit; its film slot then holds the hue. */
+    static final float QUBIT = 3f;
 
     /** A box centred at (x, y, z) in the frame, with half extents along right, up and forward. */
     private static int box(float[] out, int v, float[] f, float x, float y, float z,
