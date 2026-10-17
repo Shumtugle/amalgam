@@ -8,6 +8,8 @@ The liquid is a vacuum. Where its waves pile up, pairs of quicksilver drops rise
 
 A hopper grows as a frame round nothing: every finished one opens an empty pit. A drop that falls in settles into the next empty pit as a qubit, a small cube of light. Qubits take their colour from the spectrum in the order they arrive, so the cluster reads as a rainbow of its own history.
 
+Everything drifts towards disorder: more pairs, a trembling surface, a string out of tune. The way back is a pattern. The world listens to the order in which you look, which side of the crystal and whether on the breath; when a short run repeats, it sings it back, folds the newest qubits into one white one and grows quiet again. It does not reward the same pattern twice in a row for long, so the search never ends.
+
 The crystal breathes, and pairs rise on the breath. An observation made on the breath counts twice and rings a deep bell. As the crystal gains mass, it starts to bend the liquid round itself like a lens.
 
 There are no numbers on the screen. What you have gathered is heard, not read: a low string beneath everything sinks as resonance gathers and thickens as the crystal grows.

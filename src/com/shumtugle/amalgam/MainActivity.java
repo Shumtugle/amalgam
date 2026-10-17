@@ -116,6 +116,21 @@ public final class MainActivity extends Activity {
                 tick();
                 break;
             }
+            case World.EV_PATTERN: {
+                // the world sings the pattern back, then settles on a plain open chord
+                Listener l = w.listener;
+                float at = 0.15f;
+                for (int i = 0; i < l.patternLength; i++, at += 0.2f) {
+                    int sym = l.pattern[i];
+                    float f = SCALE[(sym >> 1) % SCALE.length] * ((sym & 1) == 1 ? 2f : 1f);
+                    sound.strikeLater(f, 0.38f, 1.2f, at);
+                }
+                sound.strikeLater(LOW, 0.7f, 2f, at + 0.1f);
+                sound.strikeLater(LOW * 1.5f, 0.4f, 2f, at + 0.1f);
+                sound.strikeLater(LOW * 2f, 0.3f, 2f, at + 0.1f);
+                thump(true);
+                break;
+            }
             case World.EV_BREATH:
                 // the breath must be heard, or nobody can look on it
                 sound.strike(LOW, 0.16f, 0.6f);
@@ -130,7 +145,7 @@ public final class MainActivity extends Activity {
 
     /** Called on the render thread once a frame. */
     void onWorldFrame(World w) {
-        sound.setCrystal(w.planted(), w.mass(), w.resonance, w.pulse);
+        sound.setCrystal(w.planted(), w.mass(), w.resonance, w.pulse, w.entropy);
     }
 
     /** The faintest touch: something fell past the horizon. */

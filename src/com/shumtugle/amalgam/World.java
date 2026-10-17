@@ -28,7 +28,17 @@ final class World {
     static final float GROWTH_RATE = 1.1f;
 
     static final int EV_PLANT = 1, EV_OBSERVE = 2, EV_OBSERVE_ON_BEAT = 3, EV_MISS = 4,
-            EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8;
+            EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9;
+
+    /**
+     * Disorder in [0, 1]. It creeps up with time and with every qubit and hopper. High, it means
+     * more pairs, a surface that ripples by itself, a string out of tune and a shimmering film.
+     * A pattern the world hears brings it down.
+     */
+    float entropy = 0.1f;
+    private static final float ENTROPY_DRIFT = 0.0008f, ENTROPY_QUBIT = 0.008f, ENTROPY_HOPPER = 0.004f;
+    final Listener listener = new Listener();
+    private float noise;
 
     // virtual pairs
     static final int MAX_PAIRS = 5;
@@ -42,8 +52,7 @@ final class World {
     private static final float DECOHERE = 0.3f;
     /** Height a wave must pile up to before a pair can rise from it unprompted. */
     private static final float CREST = 0.12f;
-    /** Pairs that rise between breaths, per second, at most. */
-    private static final float SPONTANEOUS = 0.35f;
+
 
     // real drops in flight
     static final int MAX_FLYERS = 12;
@@ -123,9 +132,11 @@ final class World {
      * Brings back a saved game. Away is how long the game was closed, in seconds;
      * the crystal grew a little by itself meanwhile.
      */
-    void restore(float u, float v, int settled, float grown, int qubits, float savedPool, float savedResonance, float away) {
+    void restore(float u, float v, int settled, float grown, float[] hues, float savedEntropy,
+                 float savedPool, float savedResonance, float away) {
         plant(u, v);
-        crystal.restore(settled, grown, qubits);
+        crystal.restore(settled, grown, hues);
+        entropy = Math.max(0f, Math.min(1f, savedEntropy));
         pool = savedPool + Math.min(AWAY_CAP, Math.max(0f, away) * TRICKLE);
         resonance = savedResonance;
         crystal.middle(mid);
@@ -181,11 +192,28 @@ final class World {
         float cx = crystalX(), cy = crystalY();
         // the drop nearer the horizon is the one that falls
         boolean aFalls = (ax - cx) * (ax - cx) + (ay - cy) * (ay - cy) < (bx - cx) * (bx - cx) + (by - cy) * (by - cy);
+        // which side of the crystal the looked-at drop was on, as the world hears it
+        float sx = (side > 0 ? ax : bx) - cx, sy = (side > 0 ? ay : by) - cy;
+        int quarter = Math.abs(sx) > Math.abs(sy) ? (sx > 0 ? 1 : 3) : (sy > 0 ? 0 : 2);
         launch(aFalls ? ax : bx, aFalls ? ay : by, FALLING, FALL_ENERGY * k, pfilm[i]);
         launch(aFalls ? bx : ax, aFalls ? by : ay, ESCAPING, ESCAPE_RESONANCE * k, pfilm[i]);
         resonance += ESCAPE_RESONANCE * k;
         if (onBeat) flash = Math.max(flash, 0.8f);
         event(onBeat ? EV_OBSERVE_ON_BEAT : EV_OBSERVE);
+        int n = listener.hear(Listener.symbol(quarter, onBeat), time);
+        if (n > 0) heard(n);
+    }
+
+    /**
+     * A pattern was heard: the newest qubits fold into one white one, disorder drops by more
+     * for a longer pattern, and the surface stills.
+     */
+    private void heard(int n) {
+        crystal.fuse(n);
+        entropy = Math.max(0f, entropy - 0.1f * n);
+        liquid.calm(0.35f);
+        flash = 1f;
+        event(EV_PATTERN);
     }
 
     /** Looking at empty liquid finds nothing and unsettles what was nearby. */
@@ -246,11 +274,19 @@ final class World {
             lastBeat = beat;
             liquid.press(crystalU(), crystalV(), 5f, 0.3f);
             event(EV_BREATH);
-            int n = mass() > 3f ? 2 : 1;
+            int n = entropy > 0.55f ? 2 : 1;
             for (int i = 0; i < n; i++) birth(true);
         }
 
-        spontaneous += dt * SPONTANEOUS;
+        entropy = Math.min(1f, entropy + ENTROPY_DRIFT * dt);
+        // disorder makes the surface tremble by itself
+        noise += dt * 4f * entropy;
+        while (noise >= 1f) {
+            noise -= 1f;
+            liquid.press(0.05f + 0.9f * rnd.nextFloat(), 0.05f + 0.9f * rnd.nextFloat(), 2f, 0.12f * entropy);
+        }
+
+        spontaneous += dt * (0.08f + 0.45f * entropy);
         if (spontaneous >= 1f) {
             spontaneous -= 1f;
             if (rnd.nextFloat() < 0.8f) birth(false);
@@ -264,7 +300,10 @@ final class World {
         int before = crystal.settledVersion;
         float left = crystal.feed(use);
         pool -= use - left;
-        if (crystal.settledVersion != before) event(EV_SETTLED);
+        if (crystal.settledVersion != before) {
+            entropy = Math.min(1f, entropy + ENTROPY_HOPPER);
+            event(EV_SETTLED);
+        }
 
         spin += dt * 0.11f;
         crystal.middle(tmp);
@@ -313,6 +352,10 @@ final class World {
      * is calm, out of the ring the breath itself sends round the crystal.
      */
     private void birth(boolean breath) {
+        // order keeps the vacuum quiet: few pairs at once while disorder is low
+        int alive = 0, limit = 1 + Math.round(3f * entropy);
+        for (int i = 0; i < MAX_PAIRS; i++) if (pon[i]) alive++;
+        if (alive >= limit) return;
         int slot = -1;
         for (int i = 0; i < MAX_PAIRS; i++) if (!pon[i]) { slot = i; break; }
         if (slot < 0) return;
@@ -387,7 +430,12 @@ final class World {
                     pool += fval[j];
                     flash = Math.max(flash, 0.6f);
                     liquid.press(crystalU(), crystalV(), 3.5f, 0.6f);
-                    event(crystal.seat() ? EV_QUBIT : EV_ABSORB);
+                    if (crystal.seat()) {
+                        entropy = Math.min(1f, entropy + ENTROPY_QUBIT);
+                        event(EV_QUBIT);
+                    } else {
+                        event(EV_ABSORB);
+                    }
                     continue;
                 }
             } else {

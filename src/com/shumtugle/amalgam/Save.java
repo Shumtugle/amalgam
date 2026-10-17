@@ -13,8 +13,9 @@ final class Save {
     static final class State {
         long seed;
         boolean planted;
-        float u, v, grown, pool, resonance;
-        int settled, qubits;
+        float u, v, grown, pool, resonance, entropy;
+        float[] hues = new float[0];
+        int settled;
         /** Seconds since the game was saved. */
         float away;
     }
@@ -32,7 +33,18 @@ final class Save {
         s.u = p.getFloat("u", 0.5f);
         s.v = p.getFloat("v", 0.5f);
         s.settled = p.getInt("settled", 0);
-        s.qubits = p.getInt("qubits", 0);
+        s.entropy = p.getFloat("entropy", 0.1f);
+        String hs = p.getString("hues", "");
+        if (hs.length() > 0) {
+            String[] parts = hs.split(",");
+            s.hues = new float[parts.length];
+            for (int i = 0; i < parts.length; i++) s.hues[i] = Float.parseFloat(parts[i]);
+        } else if (p.contains("qubits")) {
+            // saved before qubits had colours of their own: they arrived in spectrum order
+            int n = p.getInt("qubits", 0);
+            s.hues = new float[n];
+            for (int i = 0; i < n; i++) s.hues[i] = Math.min(1f, i / (float) (Crystal.MAX_HOPPERS - 1));
+        }
         s.grown = p.getFloat("grown", 0f);
         s.pool = p.getFloat("pool", 0f);
         s.resonance = p.getFloat("resonance", 0f);
@@ -51,7 +63,13 @@ final class Save {
             e.putFloat("u", w.seedU);
             e.putFloat("v", w.seedV);
             e.putInt("settled", k.settledCount());
-            e.putInt("qubits", k.qubits);
+            StringBuilder hs = new StringBuilder();
+            for (int i = 0; i < k.qubits; i++) {
+                if (i > 0) hs.append(',');
+                hs.append(k.hues[i]);
+            }
+            e.putString("hues", hs.toString());
+            e.putFloat("entropy", w.entropy);
             e.putFloat("grown", k.active != null ? k.active.grown : 1f);
             e.putFloat("pool", w.pool);
             e.putFloat("resonance", w.resonance);

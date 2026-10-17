@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4 — 2026-10-17
+
+Escape from entropy.
+
+- Disorder creeps up with time and with every qubit and hopper. It brings more pairs, a surface that ripples by itself, a string that drifts out of tune and beats, and a film that shimmers and fades.
+- The world listens to the order of observations: the side of the crystal each drop was on, and whether it was looked at on the breath. A run of three or four played twice in a row is a pattern.
+- A heard pattern is sung back. The newest qubits fold into one white qubit, the spectrum clock steps back, disorder drops and the surface stills.
+- A pattern once heard earns nothing for a while: the world gets used to it. New ones have to be found.
+- Disorder and white qubits are saved.
+
 ## 0.3 — 2026-10-17
 
 Space and qubits.

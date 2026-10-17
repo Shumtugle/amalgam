@@ -66,6 +66,14 @@ final class Liquid {
         return best;
     }
 
+    /** Takes most of the motion out of the surface at once. */
+    void calm(float keep) {
+        for (int i = 0; i < cur.length; i++) {
+            cur[i] *= keep;
+            prev[i] *= keep;
+        }
+    }
+
     /** One simulation step; the caller keeps the rate fixed. Edges stay still. */
     void step() {
         final int c = cols;

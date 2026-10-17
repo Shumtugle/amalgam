@@ -151,7 +151,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             Save.State r = restore;
             restore = null;
             world = new World(COLS, aspect, r != null ? r.seed : SystemClock.elapsedRealtime());
-            if (r != null && r.planted) world.restore(r.u, r.v, r.settled, r.grown, r.qubits, r.pool, r.resonance, r.away);
+            if (r != null && r.planted) world.restore(r.u, r.v, r.settled, r.grown, r.hues, r.entropy, r.pool, r.resonance, r.away);
         }
         Liquid lq = world.liquid;
         fieldOut = ByteBuffer.allocateDirect(lq.texels.length).order(ByteOrder.nativeOrder());
@@ -298,6 +298,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(crystal, "uPulse"), world.pulse);
         GLES30.glUniform1f(loc(crystal, "uFlash"), world.flash);
         GLES30.glUniform1f(loc(crystal, "uFilm"), 0f);
+        GLES30.glUniform1f(loc(crystal, "uEntropy"), world.entropy);
+        GLES30.glUniform1f(loc(crystal, "uTime"), world.time % 1000f);
         drawMesh(settledBuf, settledVerts);
         drawMesh(activeBuf, activeVerts);
     }

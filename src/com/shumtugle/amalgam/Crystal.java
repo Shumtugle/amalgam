@@ -49,6 +49,10 @@ final class Crystal {
      * in the spectrum: the first is red, the last of a full cycle violet.
      */
     int qubits;
+    /** Colour of each seated qubit: its place in the spectrum when it arrived, or WHITE once fused. */
+    final float[] hues = new float[MAX_HOPPERS];
+    /** Hue of a qubit fused from several: the spectrum folded back into white light. */
+    static final float WHITE = 2f;
 
     Crystal(long seed) {
         rnd = new Random(seed);
@@ -71,14 +75,15 @@ final class Crystal {
      * Rebuilds a saved cluster: the same seed gives the same hoppers in the same order,
      * so the count of finished ones and the growth of the last one are enough.
      */
-    void restore(int settled, float grown, int seated) {
+    void restore(int settled, float grown, float[] seatedHues) {
         while (settledCount() < settled && active != null) {
             active.grown = 1f;
             settledVersion++;
             active = hoppers.size() < MAX_HOPPERS ? spawn() : null;
         }
         if (active != null) active.grown = Math.max(0f, Math.min(0.999f, grown));
-        qubits = Math.max(0, Math.min(seated, settledCount()));
+        qubits = Math.min(seatedHues.length, settledCount());
+        System.arraycopy(seatedHues, 0, hues, 0, qubits);
     }
 
     /**
@@ -87,14 +92,23 @@ final class Crystal {
      */
     boolean seat() {
         if (qubits >= settledCount()) return false;
+        hues[qubits] = Math.min(1f, qubits / (float) (MAX_HOPPERS - 1));
         qubits++;
         settledVersion++;
         return true;
     }
 
-    /** Place of qubit i in the spectrum, 0 for red to 1 for violet. */
-    static float hue(int i) {
-        return Math.min(1f, i / (float) (MAX_HOPPERS - 1));
+    /**
+     * Fuses the newest qubits, up to count of them, into one white qubit. Fewer qubits means
+     * the spectrum clock steps back. Returns how many were fused, zero if there was nothing to fuse.
+     */
+    int fuse(int count) {
+        int m = Math.min(count, qubits);
+        if (m < 2) return 0;
+        qubits -= m - 1;
+        hues[qubits - 1] = WHITE;
+        settledVersion++;
+        return m;
     }
 
     /** Sum of size squared times growth: how much crystal there is. */
@@ -282,7 +296,7 @@ final class Crystal {
             // the qubit rests on the lowest ring, in the pit, peeking over the next wall
             float floor = base + step * (1f + h.jitter[h.rings - 1]);
             float q = t * 0.55f;
-            v = box(out, v, h.f, 0, floor + q, 0, q, q, q, hue(index), QUBIT);
+            v = box(out, v, h.f, 0, floor + q, 0, q, q, q, hues[index], QUBIT);
         }
         return v;
     }

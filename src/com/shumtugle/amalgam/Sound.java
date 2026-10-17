@@ -37,7 +37,12 @@ final class Sound implements Runnable {
     private final float[] dre = new float[HARMONICS * 2], dim = new float[HARMONICS * 2];
     private final float[] dcr = new float[HARMONICS * 2], dci = new float[HARMONICS * 2];
     private float droneFreq, droneLevel;
-    private volatile float droneTarget = 98f, droneTargetLevel, droneThick = 2f, breath;
+    private volatile float droneTarget = 98f, droneTargetLevel, droneThick = 2f, breath, disorder;
+
+    // strikes waiting their turn, so a phrase can be played back note by note
+    private static final int LATER = 16;
+    private final float[] laterFreq = new float[LATER], laterLevel = new float[LATER], laterRing = new float[LATER];
+    private final int[] laterWait = new int[LATER];
 
     // two one-pole low-passes: the water
     private float lp1, lp2;
@@ -73,22 +78,40 @@ final class Sound implements Runnable {
     /** Strikes a bell. Level is about 1 for a full strike; ring stretches the decay. */
     void strike(float freq, float level, float ring) {
         synchronized (lock) {
-            int v = nextVoice;
-            nextVoice = (nextVoice + 1) % VOICES;
-            for (int p = 0; p < PARTIALS; p++) {
-                int k = p % RATIO.length;
-                boolean twin = p >= RATIO.length;
-                float f = freq * RATIO[k] * (twin ? 1.0027f : 1f);
-                double th = 2.0 * Math.PI * f / RATE;
-                re[v][p] = 1f;
-                im[v][p] = 0f;
-                cr[v][p] = (float) Math.cos(th);
-                ci[v][p] = (float) Math.sin(th);
-                amp[v][p] = f > 6000f ? 0f : LEVEL[k] * level * (twin ? 0.45f : 1f);
-                mul[v][p] = (float) Math.exp(-1.0 / (DECAY[k] * ring * RATE));
+            strikeNow(freq, level, ring);
+        }
+    }
+
+    private void strikeNow(float freq, float level, float ring) {
+        int v = nextVoice;
+        nextVoice = (nextVoice + 1) % VOICES;
+        for (int p = 0; p < PARTIALS; p++) {
+            int k = p % RATIO.length;
+            boolean twin = p >= RATIO.length;
+            float f = freq * RATIO[k] * (twin ? 1.0027f : 1f);
+            double th = 2.0 * Math.PI * f / RATE;
+            re[v][p] = 1f;
+            im[v][p] = 0f;
+            cr[v][p] = (float) Math.cos(th);
+            ci[v][p] = (float) Math.sin(th);
+            amp[v][p] = f > 6000f ? 0f : LEVEL[k] * level * (twin ? 0.45f : 1f);
+            mul[v][p] = (float) Math.exp(-1.0 / (DECAY[k] * ring * RATE));
+        }
+        attack[v] = 0f;
+        on[v] = true;
+    }
+
+    /** Strikes a bell after a delay in seconds. */
+    void strikeLater(float freq, float level, float ring, float delay) {
+        synchronized (lock) {
+            for (int i = 0; i < LATER; i++) {
+                if (laterWait[i] > 0) continue;
+                laterFreq[i] = freq;
+                laterLevel[i] = level;
+                laterRing[i] = ring;
+                laterWait[i] = Math.max(1, (int) (delay * RATE));
+                return;
             }
-            attack[v] = 0f;
-            on[v] = true;
         }
     }
 
@@ -96,7 +119,8 @@ final class Sound implements Runnable {
      * The state of the game, heard. The string drops as resonance gathers and gains harmonics
      * as the crystal gains mass; it is silent until something has been planted.
      */
-    void setCrystal(boolean planted, float mass, float resonance, float pulse) {
+    void setCrystal(boolean planted, float mass, float resonance, float pulse, float entropy) {
+        disorder = entropy;
         droneTarget = 98f / (1f + 0.25f * (float) Math.log(1f + resonance * 0.5f));
         droneThick = Math.min(HARMONICS, 2f + mass * 0.4f);
         droneTargetLevel = planted ? 0.045f : 0f;
@@ -137,13 +161,19 @@ final class Sound implements Runnable {
     }
 
     private void render(short[] out) {
+        for (int i = 0; i < LATER; i++) {
+            if (laterWait[i] <= 0) continue;
+            laterWait[i] -= BLOCK;
+            if (laterWait[i] <= 0) strikeNow(laterFreq[i], laterLevel[i], laterRing[i]);
+        }
         // the string glides to its new pitch and level once per block
         droneFreq += (droneTarget - droneFreq) * 0.02f;
         droneLevel += (droneTargetLevel * (0.7f + 0.6f * breath) - droneLevel) * 0.05f;
         float thick = droneThick;
         for (int h = 0; h < HARMONICS * 2; h++) {
             int n = h % HARMONICS + 1;
-            float f = droneFreq * n * (h >= HARMONICS ? 1.004f : 1f);
+            // disorder pulls the twin string out of tune, and the two beat against each other
+            float f = droneFreq * n * (h >= HARMONICS ? 1.004f + 0.022f * disorder : 1f);
             double th = 2.0 * Math.PI * f / RATE;
             dcr[h] = (float) Math.cos(th);
             dci[h] = (float) Math.sin(th);
