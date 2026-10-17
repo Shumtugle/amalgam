@@ -48,6 +48,24 @@ final class Liquid {
         }
     }
 
+    /**
+     * The highest of a few random cells away from the edges: where waves pile up.
+     * Writes its position into out as u, v and returns its height.
+     */
+    float crest(java.util.Random rnd, int samples, float[] out) {
+        float best = -1e9f;
+        for (int i = 0; i < samples; i++) {
+            int x = 4 + rnd.nextInt(cols - 8), y = 4 + rnd.nextInt(rows - 8);
+            float h = cur[y * cols + x];
+            if (h > best) {
+                best = h;
+                out[0] = (float) x / (cols - 1);
+                out[1] = (float) y / (rows - 1);
+            }
+        }
+        return best;
+    }
+
     /** One simulation step; the caller keeps the rate fixed. Edges stay still. */
     void step() {
         final int c = cols;

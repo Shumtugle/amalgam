@@ -93,11 +93,11 @@ final class Sound implements Runnable {
     }
 
     /**
-     * How much crystal there is, and how the breath stands. The string deepens and gains
-     * harmonics with mass; it is silent until something has been planted.
+     * The state of the game, heard. The string drops as resonance gathers and gains harmonics
+     * as the crystal gains mass; it is silent until something has been planted.
      */
-    void setCrystal(boolean planted, float mass, float pulse) {
-        droneTarget = 98f / (1f + 0.35f * (float) Math.log(1f + mass));
+    void setCrystal(boolean planted, float mass, float resonance, float pulse) {
+        droneTarget = 98f / (1f + 0.25f * (float) Math.log(1f + resonance * 0.5f));
         droneThick = Math.min(HARMONICS, 2f + mass * 0.4f);
         droneTargetLevel = planted ? 0.045f : 0f;
         breath = pulse;

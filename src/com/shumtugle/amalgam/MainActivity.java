@@ -41,6 +41,7 @@ public final class MainActivity extends Activity {
         Log.i("Amalgam", "vibrator: amplitude " + (vibrator != null && vibrator.hasAmplitudeControl())
                 + ", thud " + thud);
         stage = new Stage(this);
+        stage.setRestore(Save.load(this));
         setContentView(stage);
     }
 
@@ -56,6 +57,8 @@ public final class MainActivity extends Activity {
     @Override
     protected void onPause() {
         stage.onPause();
+        // the render thread is paused now, so the world holds still while it is written down
+        Save.store(this, stage.world());
         sound.stop();
         super.onPause();
     }
@@ -80,17 +83,31 @@ public final class MainActivity extends Activity {
     /** Called on the render thread for every event the world raised this frame. */
     void onWorldEvent(int event, World w) {
         switch (event) {
-            case World.EV_RESONANT:
+            case World.EV_PLANT:
                 sound.strike(LOW, 1f, 1.4f);
                 sound.strike(LOW * 2f, 0.35f, 1.2f);
                 thump(true);
                 break;
-            case World.EV_TOUCH:
-                sound.strike(SCALE[rnd.nextInt(SCALE.length)], 0.3f, 0.8f);
+            case World.EV_OBSERVE_ON_BEAT:
+                // seen on the breath: the deep bell, and the escaping drop sings above it
+                sound.strike(LOW, 1f, 1.4f);
+                sound.strike(SCALE[rnd.nextInt(SCALE.length)] * 2f, 0.3f, 1.1f);
+                thump(true);
+                break;
+            case World.EV_OBSERVE:
+                sound.strike(SCALE[rnd.nextInt(SCALE.length)], 0.42f, 0.9f);
                 thump(false);
                 break;
+            case World.EV_MISS:
+                // looking at nothing: a dull knock, no bell
+                sound.strike(LOW * 3f, 0.07f, 0.25f);
+                break;
+            case World.EV_ABSORB:
+                sound.strike(LOW * 1.5f, 0.28f, 0.8f);
+                tick();
+                break;
             case World.EV_BREATH:
-                // the breath must be heard, or nobody can strike on it
+                // the breath must be heard, or nobody can look on it
                 sound.strike(LOW, 0.16f, 0.6f);
                 break;
             case World.EV_SETTLED:
@@ -103,7 +120,15 @@ public final class MainActivity extends Activity {
 
     /** Called on the render thread once a frame. */
     void onWorldFrame(World w) {
-        sound.setCrystal(w.planted(), w.mass(), w.pulse);
+        sound.setCrystal(w.planted(), w.mass(), w.resonance, w.pulse);
+    }
+
+    /** The faintest touch: something fell past the horizon. */
+    private void tick() {
+        Vibrator v = vibrator;
+        if (v == null || !v.hasVibrator()) return;
+        if (Build.VERSION.SDK_INT >= 29) v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK));
+        else v.vibrate(VibrationEffect.createOneShot(6, 60));
     }
 
     /**

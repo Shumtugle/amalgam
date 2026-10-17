@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2 — 2026-10-17
+
+The observer.
+
+- Pairs of quicksilver drops rise where the waves pile up, and on every breath.
+- An unobserved pair sinks back. Touching a drop makes the pair real: one drop spirals into the crystal and feeds it, the other escapes, leaving a wake, and is heard as resonance.
+- An observation on the breath counts twice. A touch on empty liquid unsettles nearby pairs and brings nothing.
+- The crystal's mass bends the liquid round it like a lens.
+- The string sinks with resonance and thickens with mass.
+- The game is saved when closed and grows a little while away.
+- Touches no longer feed the crystal directly.
+
 ## 0.1 — 2026-10-17
 
 First playable slice.

@@ -7,9 +7,14 @@ out vec4 o;
 uniform sampler2D uField;   // r, g: slope; b: height; all offset by half
 uniform vec4 uGlow;         // xy: crystal on screen, z: glow strength, w: screen height over width
 uniform float uFilm;        // shifts every film thickness
+uniform float uLens;        // how strongly the crystal's mass bends the view round it
 
 void main() {
-    vec4 t = texture(uField, vUv);
+    // Lensing: a point seen at distance r from the mass shows what lies closer to it.
+    vec2 d0 = (vUv - uGlow.xy) * vec2(1.0, uGlow.w);
+    vec2 bend = -d0 * uLens / (dot(d0, d0) + 0.003);
+    bend /= max(1.0, length(bend) / 0.06);
+    vec4 t = texture(uField, vUv + bend * vec2(1.0, 1.0 / uGlow.w));
     vec2 s = (t.xy - 0.50196) * (255.0 / 300.0);
     float h = (t.z - 0.50196) * (255.0 / 60.0);
     vec3 n = normalize(vec3(-s * 2.4, 1.0));

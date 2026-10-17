@@ -26,15 +26,18 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private static final float STEP = 1f / 60f;
 
     private final MainActivity act;
-    private World world;
+    private volatile World world;
+    /** A saved game to bring back when the surface first appears, or null for a fresh start. */
+    private Save.State restore;
 
     /** Touches waiting for the GL thread: kind, u, v triples. */
     private final float[] pending = new float[3 * 64];
     private int pendingCount;
     private final float[] lastX = new float[10], lastY = new float[10];
 
-    private int glass, crystal;
-    private int fieldTex, triBuf, settledBuf, activeBuf;
+    private int glass, crystal, drop;
+    private int fieldTex, triBuf, settledBuf, activeBuf, quadBuf;
+    private final float[] drops = new float[World.maxDrops() * 8];
     private int settledVerts, settledVersion = -1;
     private float[] meshScratch;
     private FloatBuffer meshOut;
@@ -86,6 +89,16 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         return true;
     }
 
+    /** Hands over a saved game; it is applied when the surface first appears. */
+    void setRestore(Save.State s) {
+        restore = s;
+    }
+
+    /** The world, for saving. Read it only while the render thread is paused. */
+    World world() {
+        return world;
+    }
+
     /** Called when the activity comes back, so the pause does not count as one long frame. */
     void resumeClock() {
         lastNanos = 0;
@@ -105,11 +118,17 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     public void onSurfaceCreated(GL10 unused, EGLConfig config) {
         glass = program("glass.vert", "glass.frag");
         crystal = program("crystal.vert", "crystal.frag");
+        drop = program("drop.vert", "drop.frag");
         int[] ids = new int[4];
-        GLES30.glGenBuffers(3, ids, 0);
+        GLES30.glGenBuffers(4, ids, 0);
         triBuf = ids[0];
         settledBuf = ids[1];
         activeBuf = ids[2];
+        quadBuf = ids[3];
+        FloatBuffer quad = ByteBuffer.allocateDirect(8 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        quad.put(new float[] {-1, -1, 1, -1, -1, 1, 1, 1}).position(0);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadBuf);
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, 8 * 4, quad, GLES30.GL_STATIC_DRAW);
         FloatBuffer tri = ByteBuffer.allocateDirect(6 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         tri.put(new float[] {-1, -1, 3, -1, -1, 3}).position(0);
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, triBuf);
@@ -128,7 +147,12 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glViewport(0, 0, w, h);
         float aspect = (float) h / w;
         if (world == null || Math.abs(world.aspect - aspect) > 0.01f)
-            world = new World(COLS, aspect, SystemClock.elapsedRealtime());
+        {
+            Save.State r = restore;
+            restore = null;
+            world = new World(COLS, aspect, r != null ? r.seed : SystemClock.elapsedRealtime());
+            if (r != null && r.planted) world.restore(r.u, r.v, r.settled, r.grown, r.pool, r.resonance, r.away);
+        }
         Liquid lq = world.liquid;
         fieldOut = ByteBuffer.allocateDirect(lq.texels.length).order(ByteOrder.nativeOrder());
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fieldTex);
@@ -178,6 +202,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         act.onWorldFrame(world);
 
         drawGlass();
+        drawDrops();
         drawCrystal();
 
         frames++;
@@ -206,19 +231,48 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniform1i(loc(glass, "uField"), 0);
         float glowU = 0.5f, glowV = 0.5f, glow = 0f;
         if (world.planted()) {
-            float[] p = world.crystalScreen();
-            glowU = p[0];
-            glowV = p[1];
+            glowU = world.crystalU();
+            glowV = world.crystalV();
             glow = 0.4f + 0.6f * world.pulse + world.flash;
         }
         GLES30.glUniform4f(loc(glass, "uGlow"), glowU, glowV, glow, world.aspect);
         GLES30.glUniform1f(loc(glass, "uFilm"), 0f);
+        GLES30.glUniform1f(loc(glass, "uLens"), world.lens());
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, triBuf);
         GLES30.glEnableVertexAttribArray(0);
         GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, 0);
         GLES30.glDisableVertexAttribArray(1);
         GLES30.glDisableVertexAttribArray(2);
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3);
+    }
+
+    private void drawDrops() {
+        int n = world.drops(drops);
+        if (n == 0) return;
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+        GLES30.glEnable(GLES30.GL_BLEND);
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA);
+        GLES30.glUseProgram(drop);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadBuf);
+        GLES30.glEnableVertexAttribArray(0);
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, 0);
+        GLES30.glDisableVertexAttribArray(1);
+        GLES30.glDisableVertexAttribArray(2);
+        GLES30.glUniform1f(loc(drop, "uAspect"), world.aspect);
+        int center = loc(drop, "uCenter"), radius = loc(drop, "uRadius"), alpha = loc(drop, "uAlpha");
+        int film = loc(drop, "uFilm"), dir = loc(drop, "uDir"), stretch = loc(drop, "uStretch");
+        for (int i = 0; i < n; i++) {
+            int o = i * 8;
+            if (drops[o + 2] <= 0f || drops[o + 3] <= 0f) continue;
+            GLES30.glUniform2f(center, drops[o], drops[o + 1]);
+            GLES30.glUniform1f(radius, drops[o + 2]);
+            GLES30.glUniform1f(alpha, drops[o + 3]);
+            GLES30.glUniform1f(film, drops[o + 4]);
+            GLES30.glUniform2f(dir, drops[o + 5], drops[o + 6]);
+            GLES30.glUniform1f(stretch, drops[o + 7]);
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
+        }
+        GLES30.glDisable(GLES30.GL_BLEND);
     }
 
     private void drawCrystal() {

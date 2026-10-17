@@ -57,6 +57,24 @@ final class Crystal {
         active = root;
     }
 
+    /** Hoppers that have finished growing. */
+    int settledCount() {
+        return hoppers.size() - (active != null ? 1 : 0);
+    }
+
+    /**
+     * Rebuilds a saved cluster: the same seed gives the same hoppers in the same order,
+     * so the count of finished ones and the growth of the last one are enough.
+     */
+    void restore(int settled, float grown) {
+        while (settledCount() < settled && active != null) {
+            active.grown = 1f;
+            settledVersion++;
+            active = hoppers.size() < MAX_HOPPERS ? spawn() : null;
+        }
+        if (active != null) active.grown = Math.max(0f, Math.min(0.999f, grown));
+    }
+
     /** Sum of size squared times growth: how much crystal there is. */
     float mass() {
         float m = 0;
@@ -70,7 +88,7 @@ final class Crystal {
     /** Energy needed to grow a hopper of this size from nothing. */
     private float cost(float size) {
         // later hoppers cost more, so the cluster fills in minutes of play, not seconds
-        return (0.5f + 1.3f * size * size) * (1f + hoppers.size() * 0.1f);
+        return (0.5f + 1.3f * size * size) * (1f + hoppers.size() * 0.25f);
     }
 
     /**
