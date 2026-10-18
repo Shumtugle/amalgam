@@ -40,7 +40,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private int pendingCount;
     private final float[] lastX = new float[10], lastY = new float[10];
 
-    private int glass, crystal, drop, vista, eyeProg, wordProg, wordTex;
+    private int glass, crystal, drop, vista, eyeProg, wordProg, wordTex, starProg;
+    private final float[] starAt = new float[2];
     private int fieldTex, triBuf, settledBuf, activeBuf, quadBuf, threadBuf;
     private int threadVerts;
     private final float[] drops = new float[World.maxDrops() * 8];
@@ -156,6 +157,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         vista = program("glass.vert", "vista.frag");
         eyeProg = program("drop.vert", "eye.frag");
         wordProg = program("word.vert", "word.frag");
+        starProg = program("drop.vert", "star.frag");
         wordTex = makeWord();
         int[] ids = new int[5];
         GLES30.glGenBuffers(5, ids, 0);
@@ -190,6 +192,10 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             Save.State r = restore;
             restore = null;
             world = new World(COLS, aspect, r != null ? r.seed : SystemClock.elapsedRealtime());
+            if (r != null) {
+                world.played = r.played;
+                world.watched = r.watched;
+            }
             if (r != null && r.planted) world.restore(r.generation, r.epoch, r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away);
             else if (r != null) world.between(r.generation, r.epoch, r.resonance);
         }
@@ -244,6 +250,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         act.onWorldFrame(world);
 
         drawGlass();
+        drawStars();
         drawVision();
         drawDrops();
         drawCrystal();
@@ -312,6 +319,44 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glDisableVertexAttribArray(1);
         GLES30.glDisableVertexAttribArray(2);
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3);
+        GLES30.glDisable(GLES30.GL_BLEND);
+    }
+
+    /** One star for every finished cycle, seen only through still water. */
+    private void drawStars() {
+        int played = Math.min(world.played, World.MAX_STARS), watched = Math.min(world.watched, World.MAX_STARS);
+        if (played + watched == 0) return;
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+        GLES30.glEnable(GLES30.GL_BLEND);
+        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE);
+        GLES30.glUseProgram(starProg);
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fieldTex);
+        GLES30.glUniform1i(loc(starProg, "uField"), 0);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadBuf);
+        GLES30.glEnableVertexAttribArray(0);
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, 0);
+        GLES30.glDisableVertexAttribArray(1);
+        GLES30.glDisableVertexAttribArray(2);
+        GLES30.glUniform1f(loc(starProg, "uAspect"), world.aspect);
+        GLES30.glUniform2f(loc(starProg, "uDir"), 1f, 0f);
+        GLES30.glUniform1f(loc(starProg, "uStretch"), 1f);
+        GLES30.glUniform1f(loc(starProg, "uTime"), world.time % 1000f);
+        int center = loc(starProg, "uCenter"), radius = loc(starProg, "uRadius");
+        int tint = loc(starProg, "uTint"), seed = loc(starProg, "uSeed");
+        for (int pass = 0; pass < 2; pass++) {
+            boolean byWatcher = pass == 1;
+            int n = byWatcher ? watched : played;
+            GLES30.glUniform1f(radius, byWatcher ? 0.009f : 0.014f);
+            if (byWatcher) GLES30.glUniform3f(tint, 0.42f, 0.55f, 0.85f);
+            else GLES30.glUniform3f(tint, 1f, 0.9f, 0.72f);
+            for (int k = 0; k < n; k++) {
+                world.star(k, byWatcher, starAt);
+                GLES30.glUniform2f(center, starAt[0], starAt[1]);
+                GLES30.glUniform1f(seed, (k * 0.618f + (byWatcher ? 0.31f : 0f)) % 1f);
+                GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
+            }
+        }
         GLES30.glDisable(GLES30.GL_BLEND);
     }
 

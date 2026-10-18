@@ -16,7 +16,7 @@ final class Save {
         float u, v, grown, pool, resonance, entropy;
         float[] hues = new float[0];
         int[] partners = new int[0];
-        int settled, generation, epoch;
+        int settled, generation, epoch, played, watched;
         /** Seconds since the game was saved. */
         float away;
     }
@@ -33,6 +33,8 @@ final class Save {
         s.planted = p.getBoolean("planted", false);
         s.generation = p.getInt("generation", 0);
         s.epoch = p.getInt("epoch", 0);
+        s.played = p.getInt("played", 0);
+        s.watched = p.getInt("watched", 0);
         s.u = p.getFloat("u", 0.5f);
         s.v = p.getFloat("v", 0.5f);
         s.settled = p.getInt("settled", 0);
@@ -71,6 +73,8 @@ final class Save {
         e.putInt("generation", w.generation + (falling ? 1 : 0));
         e.putFloat("resonance", w.resonance);
         e.putInt("epoch", w.epoch);
+        e.putInt("played", w.played + (falling && w.watcher == null ? 1 : 0));
+        e.putInt("watched", w.watched + (falling && w.watcher != null ? 1 : 0));
         e.putBoolean("planted", w.planted() && !falling);
         if (w.planted() && !falling) {
             Crystal k = w.crystal;

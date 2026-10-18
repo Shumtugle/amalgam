@@ -294,9 +294,30 @@ final class World {
         return false;
     }
 
-    /** How much faster the world runs: the watcher plays in quick time, its ending in real time. */
+    /** How much faster the world runs. The watcher plays at a person's pace, so: never. */
     float speed() {
-        return watcher != null && wordAge < 0f ? 5f : 1f;
+        return 1f;
+    }
+
+    /**
+     * Stars in the deep, one for every cycle that has ended in a collapse: warm for the player's,
+     * colder and smaller for the watcher's. They outlast everything, black peace included.
+     */
+    int played, watched;
+    static final int MAX_STARS = 120;
+
+    /**
+     * Where star k of a kind sits on screen, written into out as u, v. Fixed for each star, so
+     * the sky only ever gains points; kept clear of the edges and the eye's corner.
+     */
+    void star(int k, boolean byWatcher, float[] out) {
+        long h = (k * 0x9E3779B97F4A7C15L) ^ (byWatcher ? 0x5851F42D4C957F2DL : 0x2545F4914F6CDD1DL);
+        h ^= h >>> 29; h *= 0xBF58476D1CE4E5B9L; h ^= h >>> 32;
+        float u = 0.06f + 0.88f * ((h & 0xFFFF) / 65535f);
+        float v = 0.05f + 0.85f * (((h >>> 16) & 0xFFFF) / 65535f);
+        if (u > 0.74f && v > 0.8f) v -= 0.25f;   // the eye's corner stays dark
+        out[0] = u;
+        out[1] = v;
     }
 
     /** A finger slid across the glass. Ignored while the watcher plays. */
@@ -574,6 +595,8 @@ final class World {
     }
 
     private void endCollapse() {
+        if (watcher != null) watched++;
+        else played++;
         dropX = crystalX();
         dropY = crystalY();
         dropLeft = watcher == null;

@@ -1,11 +1,16 @@
 # Changelog
 
+## 1.1 — 2026-10-18
+
+- The eye plays at a person's pace now, not in quick time.
+- Every cycle that ends in a collapse leaves a star in the deep: a small point of light that shows only through still water and goes out under a ripple. A cycle the eye played leaves a colder, smaller one. Stars outlast everything, black peace included.
+
 ## 1.0 — 2026-10-18
 
 The eye.
 
 - Back opens an eye in the top right corner for a few seconds. Back again while it is open leaves the game.
-- Touch the eye and the game plays itself, in quick time, while the eye watches. Your own touches are ignored until it is done; back takes the game back at any moment.
+- Touch the eye and the game plays itself while the eye watches. Your own touches are ignored until it is done; back takes the game back at any moment.
 
 ## 0.8.2 — 2026-10-18
 
