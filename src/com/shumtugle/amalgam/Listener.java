@@ -29,6 +29,16 @@ final class Listener {
     final int[] pattern = new int[4];
     int patternLength;
 
+    /** How many symbols are in the current run, since the last pattern. */
+    int length() {
+        return count;
+    }
+
+    /** Symbol i of the current run, oldest first. */
+    int at(int i) {
+        return last[i];
+    }
+
     static int symbol(int side, boolean onBeat) {
         return side * 2 + (onBeat ? 1 : 0);
     }

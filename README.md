@@ -16,13 +16,15 @@ Draw a circle on the liquid and it holds for a moment. A pair born inside it is 
 
 The black is deep. A touch on a hopper sends it under, and it rises again half a turn later. Sometimes, on an event or for no reason, deep space shows through the liquid for a few seconds: a jump to light speed, a supernova, a lava world, a nebula, galaxies.
 
+Press back and an eye opens in the corner. Touch it, and the game plays itself while you watch.
+
 The crystal breathes, and pairs rise on the breath. An observation made on the breath counts twice and rings a deep bell. As the crystal gains mass, it starts to bend the liquid round itself like a lens.
 
 There are no numbers on the screen. What you have gathered is heard, not read: a low string beneath everything sinks as resonance gathers and thickens as the crystal grows.
 
 The game remembers the crystal when closed, and it grows a little while you are away.
 
-Upgrades, collapse and new materials come later.
+Materials of their own for later cycles (glass, light, living threads) come later; for now each cycle shifts the colours.
 
 ## How it is made
 

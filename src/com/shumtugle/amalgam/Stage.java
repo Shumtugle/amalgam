@@ -1,7 +1,12 @@
 package com.shumtugle.amalgam;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Typeface;
 import android.opengl.GLES30;
 import android.opengl.GLSurfaceView;
+import android.opengl.GLUtils;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -35,7 +40,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private int pendingCount;
     private final float[] lastX = new float[10], lastY = new float[10];
 
-    private int glass, crystal, drop, vista;
+    private int glass, crystal, drop, vista, eyeProg, wordProg, wordTex;
     private int fieldTex, triBuf, settledBuf, activeBuf, quadBuf, threadBuf;
     private int threadVerts;
     private final float[] drops = new float[World.maxDrops() * 8];
@@ -100,6 +105,34 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         return world;
     }
 
+    /** The system back, handed to the world on the render thread. */
+    void back() {
+        queue(2, 0f, 0f);
+    }
+
+    /** The word of the watcher's ending, drawn once with the system's serif face. */
+    private int makeWord() {
+        Bitmap b = Bitmap.createBitmap(1024, 512, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(0xFFFFFFFF);
+        p.setTypeface(Typeface.create(Typeface.SERIF, Typeface.ITALIC));
+        p.setTextSize(300f);
+        p.setTextAlign(Paint.Align.CENTER);
+        Paint.FontMetrics m = p.getFontMetrics();
+        c.drawText("try", 512f, 256f - (m.ascent + m.descent) / 2f, p);
+        int[] ids = new int[1];
+        GLES30.glGenTextures(1, ids, 0);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ids[0]);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE);
+        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, b, 0);
+        b.recycle();
+        return ids[0];
+    }
+
     /** Called when the activity comes back, so the pause does not count as one long frame. */
     void resumeClock() {
         lastNanos = 0;
@@ -121,6 +154,9 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         crystal = program("crystal.vert", "crystal.frag");
         drop = program("drop.vert", "drop.frag");
         vista = program("glass.vert", "vista.frag");
+        eyeProg = program("drop.vert", "eye.frag");
+        wordProg = program("word.vert", "word.frag");
+        wordTex = makeWord();
         int[] ids = new int[5];
         GLES30.glGenBuffers(5, ids, 0);
         triBuf = ids[0];
@@ -185,21 +221,23 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             for (int i = 0; i < pendingCount; i++) {
                 float u = pending[i * 3 + 1], v = pending[i * 3 + 2];
                 if (pending[i * 3] == 0) world.touch(u, v);
-                else world.drag(u, v);
+                else if (pending[i * 3] == 1) world.drag(u, v);
+                else if (world.back()) act.quit();
             }
             pendingCount = 0;
         }
 
         // the world and the liquid run at a fixed rate whatever the display does
-        accum += dt;
-        int steps = 0;
-        while (accum >= STEP && steps < 4) {
+        // the watcher plays in quick time: more steps of the same size each frame
+        accum += dt * world.speed();
+        int steps = 0, most = world.speed() > 1f ? 8 : 4;
+        while (accum >= STEP && steps < most) {
             world.update(STEP);
             world.liquid.step();
             accum -= STEP;
             steps++;
         }
-        if (steps == 4) accum = 0;
+        if (steps == most) accum = 0;
 
         int n = world.takeEvents(events);
         for (int i = 0; i < n; i++) act.onWorldEvent(events[i], world);
@@ -209,6 +247,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         drawVision();
         drawDrops();
         drawCrystal();
+        drawWord();
+        drawEye();
 
         frames++;
         frameNanos += System.nanoTime() - now;
@@ -272,6 +312,59 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glDisableVertexAttribArray(1);
         GLES30.glDisableVertexAttribArray(2);
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3);
+        GLES30.glDisable(GLES30.GL_BLEND);
+    }
+
+    /** The eye in the corner, over everything. */
+    private void drawEye() {
+        if (world.eye <= 0.01f) return;
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+        GLES30.glEnable(GLES30.GL_BLEND);
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA);
+        GLES30.glUseProgram(eyeProg);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadBuf);
+        GLES30.glEnableVertexAttribArray(0);
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, 0);
+        GLES30.glDisableVertexAttribArray(1);
+        GLES30.glDisableVertexAttribArray(2);
+        GLES30.glUniform2f(loc(eyeProg, "uCenter"), World.EYE_U, world.eyeV());
+        GLES30.glUniform1f(loc(eyeProg, "uRadius"), World.EYE_R / 1.15f);
+        GLES30.glUniform1f(loc(eyeProg, "uAspect"), world.aspect);
+        GLES30.glUniform2f(loc(eyeProg, "uDir"), 1f, 0f);
+        GLES30.glUniform1f(loc(eyeProg, "uStretch"), 1f);
+        GLES30.glUniform1f(loc(eyeProg, "uAlpha"), world.eye);
+        GLES30.glUniform1f(loc(eyeProg, "uTime"), world.time % 1000f);
+        GLES30.glUniform1f(loc(eyeProg, "uOpen"), world.watcher != null ? 1f : 0f);
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
+        GLES30.glDisable(GLES30.GL_BLEND);
+    }
+
+    /** The word the watcher's game ends on, rushing out of the point where the crystal fell. */
+    private void drawWord() {
+        float t = world.wordAge;
+        if (t < 0f) return;
+        float a = Math.min(1f, t / 1f) * (1f - Math.max(0f, Math.min(1f, (t - 3.2f) / 1.4f)));
+        if (a <= 0f) return;
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+        GLES30.glEnable(GLES30.GL_BLEND);
+        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE);
+        GLES30.glUseProgram(wordProg);
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, wordTex);
+        GLES30.glUniform1i(loc(wordProg, "uText"), 0);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadBuf);
+        GLES30.glEnableVertexAttribArray(0);
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, 0);
+        GLES30.glDisableVertexAttribArray(1);
+        GLES30.glDisableVertexAttribArray(2);
+        // drifting towards the middle as it grows, so the dive goes through the centre
+        float k = Math.min(1f, t / 3f);
+        GLES30.glUniform2f(loc(wordProg, "uCenter"), world.wordU + (0.5f - world.wordU) * k, world.wordV + (0.5f - world.wordV) * k);
+        GLES30.glUniform1f(loc(wordProg, "uSize"), 0.04f * (float) Math.exp(1.25f * t));
+        GLES30.glUniform1f(loc(wordProg, "uAspect"), world.aspect);
+        GLES30.glUniform1f(loc(wordProg, "uAlpha"), a);
+        GLES30.glUniform1f(loc(wordProg, "uTime"), t);
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
         GLES30.glDisable(GLES30.GL_BLEND);
     }
 

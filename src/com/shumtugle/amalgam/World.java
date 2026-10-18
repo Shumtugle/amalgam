@@ -31,7 +31,19 @@ final class World {
             EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9,
             EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15,
             EV_PLUCK = 16, EV_COLLAPSE = 17, EV_SINGULARITY = 18,
-            EV_PEACE = 19;
+            EV_PEACE = 19, EV_EYE = 20, EV_WATCH = 21, EV_WORD = 22, EV_RETURN = 23;
+
+    /**
+     * The eye in the top right corner. Back opens it for a while; a touch on it hands the game
+     * to the watcher. Back again while it is open leaves the game.
+     */
+    float eye;
+    private float eyeLeft;
+    static final float EYE_U = 0.86f, EYE_TOP = 0.13f, EYE_R = 0.055f;
+    /** Seconds into the end of the watcher's game, or -1. */
+    float wordAge = -1f;
+    float wordU = 0.5f, wordV = 0.5f;
+    static final float WORD_TIME = 6f;
 
     /**
      * Left alone, the drop a collapse leaves fades and is gone: the black of before the first
@@ -241,8 +253,60 @@ final class World {
         return collapse < 0f ? 0f : Math.min(1f, collapse / COLLAPSE_TIME);
     }
 
-    /** A finger came down at (u, v). */
+    /** The watcher, while it holds the game; null when the player does. */
+    Watcher watcher;
+
+    /** A finger came down at (u, v). Ignored while the watcher plays. */
     void touch(float u, float v) {
+        if (watcher != null || wordAge >= 0f) return;
+        if (eye > 0.5f && onEye(u, v)) {
+            watcher = new Watcher(this, seed ^ (long) (time * 1000f));
+            eyeLeft = 0f;
+            event(EV_WATCH);
+            return;
+        }
+        touchAs(u, v);
+    }
+
+    private boolean onEye(float u, float v) {
+        float dx = u - EYE_U, dy = (v - eyeV()) * aspect;
+        return dx * dx + dy * dy < (EYE_R * 1.8f) * (EYE_R * 1.8f);
+    }
+
+    /** Height of the eye's centre on screen, in screen units. */
+    float eyeV() {
+        return 1f - EYE_TOP / aspect;
+    }
+
+    /**
+     * The system back. Opens the eye; with the eye open, asks to leave; while the watcher plays,
+     * takes the game back from it. Returns true when the game should close.
+     */
+    boolean back() {
+        if (watcher != null && wordAge < 0f) {
+            watcher = null;
+            event(EV_RETURN);
+            return false;
+        }
+        if (eye > 0.5f && watcher == null) return true;
+        eyeLeft = 6f;
+        event(EV_EYE);
+        return false;
+    }
+
+    /** How much faster the world runs: the watcher plays in quick time, its ending in real time. */
+    float speed() {
+        return watcher != null && wordAge < 0f ? 5f : 1f;
+    }
+
+    /** A finger slid across the glass. Ignored while the watcher plays. */
+    void drag(float u, float v) {
+        if (watcher != null) return;
+        dragAs(u, v);
+    }
+
+    /** A touch, whoever makes it. */
+    void touchAs(float u, float v) {
         if (collapse >= 0f) return;
         stroke = 0f;
         strokeSpent = false;
@@ -281,8 +345,8 @@ final class World {
         else if (!pluckAt(u, v) && !sinkAt(u, v)) miss(x, y);
     }
 
-    /** A finger slid across the glass: ripples, and a long stroke may open a vision. */
-    void drag(float u, float v) {
+    /** A stroke, whoever makes it: ripples, and a long stroke may open a vision. */
+    void dragAs(float u, float v) {
         liquid.press(u, v, 2.2f, 0.35f);
         stroke += 0.02f;
         addPath(u, v * aspect);
@@ -512,7 +576,14 @@ final class World {
     private void endCollapse() {
         dropX = crystalX();
         dropY = crystalY();
-        dropLeft = true;
+        dropLeft = watcher == null;
+        if (watcher != null) {
+            // the watcher's game does not end in a drop
+            wordAge = 0f;
+            wordU = crystalU();
+            wordV = crystalV();
+            event(EV_WORD);
+        }
         dropAge = 0f;
         crystal = null;
         collapse = -1f;
@@ -582,6 +653,21 @@ final class World {
     void update(float dt) {
         time += dt;
         flash = Math.max(0f, flash - dt * 1.8f);
+        // the eye stays open while it watches; otherwise it closes by itself
+        eyeLeft = Math.max(0f, eyeLeft - dt / speed());
+        float eyeTarget = watcher != null || eyeLeft > 0f ? 1f : 0f;
+        eye += (eyeTarget - eye) * Math.min(1f, dt * 4f / speed());
+        if (wordAge >= 0f) {
+            wordAge += dt;
+            if (wordAge >= WORD_TIME) {
+                wordAge = -1f;
+                watcher = null;
+                peace();
+                event(EV_RETURN);
+            }
+            return;
+        }
+        if (watcher != null) watcher.step(dt);
         weary *= (float) Math.exp(-dt / 150f);
         if (crystal == null) {
             if (dropLeft) {

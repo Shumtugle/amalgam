@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0 — 2026-10-18
+
+The eye.
+
+- Back opens an eye in the top right corner for a few seconds. Back again while it is open leaves the game.
+- Touch the eye and the game plays itself, in quick time, while the eye watches. Your own touches are ignored until it is done; back takes the game back at any moment.
+
 ## 0.8.2 — 2026-10-18
 
 - Black peace: the drop a collapse leaves, if nobody touches it for fifteen seconds, melts away over the last three. The water is as black as before the first touch, and everything starts over from it: the cycle count, the resonance, the colours. The next crystal is a different one.

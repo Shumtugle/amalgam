@@ -93,6 +93,26 @@ public final class MainActivity extends Activity {
         if (focus) hideBars();
     }
 
+    @Override
+    public void onBackPressed() {
+        // back opens the eye; the world decides when back means leaving
+        if (stage == null) {
+            super.onBackPressed();
+            return;
+        }
+        stage.back();
+    }
+
+    /** Leaves the game; safe to call from the render thread. */
+    void quit() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                finish();
+            }
+        });
+    }
+
     @SuppressWarnings("deprecation")
     private void hideBars() {
         getWindow().getDecorView().setSystemUiVisibility(
@@ -223,6 +243,23 @@ public final class MainActivity extends Activity {
             case World.EV_PEACE:
                 // the last sound: one faint high note, and then nothing
                 sound.strike(SCALE[4] * 2f, 0.08f, 2.5f);
+                break;
+            case World.EV_EYE:
+                sound.strike(SCALE[3] * 2f, 0.1f, 1.2f);
+                break;
+            case World.EV_WATCH:
+                // the eye takes over: a low note and a widening
+                sound.strike(LOW * 2f, 0.4f, 2f);
+                sound.strikeLater(LOW * 3f, 0.25f, 2f, 0.3f);
+                thump(false);
+                break;
+            case World.EV_WORD:
+                sound.strike(SCALE[0] * 2f, 0.3f, 3f);
+                sound.strikeLater(SCALE[2] * 2f, 0.26f, 3f, 0.5f);
+                sound.strikeLater(SCALE[4] * 2f, 0.22f, 3f, 1.0f);
+                break;
+            case World.EV_RETURN:
+                tick();
                 break;
             case World.EV_BREATH:
                 // the breath must be heard, or nobody can look on it
