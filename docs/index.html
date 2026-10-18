@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Amalgam — a crystal in a black liquid</title>
+<meta name="description" content="A slow puzzle for Android about a crystal growing in a black liquid. The water and the crystal on this page run on the game's own shaders.">
+<meta name="theme-color" content="#050507">
+<link rel="icon" href="icon.png">
+<style>
+  :root{
+    --bg:#050507; --surface:#0d0e12; --line:#1d1f26;
+    --text:#ece8f2; --dim:#8e8a96; --off:#55525c;
+    --clear:#e8e8ec; --lilac:#cc94ff; --lightblue:#8cd9ff; --lime:#b3ff6b;
+    --violet:#9e5cff; --blue:#527aff; --red:#ff5752;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text)}
+  body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+
+  .hero{position:relative;height:100vh;height:100svh;min-height:540px;overflow:hidden;background:#000}
+  #glass{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:crosshair}
+  .over{position:absolute;left:0;right:0;top:0;padding:28px max(16px,env(safe-area-inset-left)) 0;pointer-events:none}
+  .over .wrap{max-width:1080px;margin:0 auto}
+  .over *{pointer-events:auto}
+  .mark{display:flex;align-items:center;gap:10px;font-size:13px;letter-spacing:.06em;color:var(--dim)}
+  .mark img{width:26px;height:26px;border-radius:7px}
+  h1{font-size:clamp(44px,9vw,84px);line-height:1;margin:18px 0 10px;font-weight:200;letter-spacing:.32em;text-transform:uppercase}
+  .lede{font-size:clamp(17px,2.4vw,21px);max-width:30em;margin:0 0 20px;color:#d8d3e0}
+  .acts{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .btn{display:inline-block;text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:999px;border:1px solid var(--text);background:var(--text);color:#08080a}
+  .btn.ghost{background:rgba(0,0,0,.35);color:var(--text);border-color:rgba(255,255,255,.25)}
+  .btn:focus-visible{outline:2px solid var(--lightblue);outline-offset:3px}
+
+  .under{position:absolute;left:0;right:0;bottom:0;padding:0 16px max(18px,env(safe-area-inset-bottom));pointer-events:none}
+  .under .wrap{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px}
+  .hint{font-size:13.5px;color:var(--dim);max-width:24em;margin:0}
+  .surfaces{display:flex;gap:9px;pointer-events:auto}
+  .dot{all:unset;width:26px;height:26px;border-radius:50%;cursor:pointer;border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 0 0 5px rgba(0,0,0,.55)}
+  .dot[aria-pressed="true"]{box-shadow:inset 0 0 0 2px rgba(0,0,0,.55),0 0 0 2px rgba(255,255,255,.55)}
+  .dot:focus-visible{outline:2px solid var(--text);outline-offset:3px}
+  .nogl{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--dim)}
+
+  main{max-width:1080px;margin:0 auto;padding:0 16px}
+  section{padding:46px 0;border-top:1px solid var(--line)}
+  section:first-child{border-top:0}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
+  h2{font-size:clamp(26px,4vw,34px);line-height:1.2;margin:0 0 18px;font-weight:300;letter-spacing:.02em}
+  h3{font-size:17px;margin:0 0 4px;font-weight:600}
+  p{margin:0 0 14px;max-width:40em}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:26px 34px}
+  .cols p{color:#cfcad6}
+
+  .langs{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:8px}
+  .lang{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 16px 14px}
+  .chips{display:flex;gap:6px;margin-bottom:10px}
+  .chip{width:16px;height:16px;border-radius:50%}
+  .lang p{font-size:15px;color:#bdb8c6;margin:0}
+  .lang h3{margin-bottom:6px}
+
+  figure{margin:0}
+  figure img{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--line);background:#000}
+  figcaption{font-size:13.5px;color:var(--dim);margin-top:10px;max-width:46em}
+
+  .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px 34px}
+  .facts p{font-size:15px;color:#bdb8c6}
+  footer{max-width:1080px;margin:0 auto;padding:30px 16px 48px;border-top:1px solid var(--line);font-size:13.5px;color:var(--off);display:flex;flex-wrap:wrap;gap:8px 22px}
+  footer a{color:var(--dim)}
+  @media (max-width:560px){
+    .over{padding-top:20px}
+    h1{letter-spacing:.24em;margin-top:14px}
+    .lede{font-size:16.5px;margin-bottom:16px}
+    .under .wrap{flex-direction:column-reverse;align-items:flex-start}
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <canvas id="glass" aria-label="The black liquid and a crystal, live. Touch the water; touch a pair of drops."></canvas>
+  <div class="nogl" id="nogl"><p>This browser cannot show the live water: it needs WebGL 2.<br>The game itself needs OpenGL ES 3.0 on the phone.</p></div>
+  <div class="over"><div class="wrap">
+    <div class="mark"><img src="icon.png" alt=""><span>Android · puzzle</span></div>
+    <h1>Amalgam</h1>
+    <p class="lede">A slow puzzle about a crystal growing in a black liquid. No numbers on the screen: you read the world by its colour and hear it answer.</p>
+    <div class="acts">
+      <a class="btn" href="https://github.com/Shumtugle/amalgam/releases/latest">Download for Android</a>
+      <a class="btn ghost" href="https://github.com/Shumtugle/amalgam">Source code</a>
+    </div>
+  </div></div>
+  <div class="under"><div class="wrap">
+    <p class="hint">This is live: the game's own shaders, in your browser. Touch the water. When a pair of drops rises, touch it, best on the breath.</p>
+    <div class="surfaces" role="group" aria-label="Surfaces">
+      <button class="dot" style="background:var(--clear)" aria-label="Clear surface" aria-pressed="true" data-layer="0"></button>
+      <button class="dot" style="background:var(--lilac)" aria-label="Lilac surface" aria-pressed="false" data-layer="1"></button>
+      <button class="dot" style="background:var(--lightblue)" aria-label="Light blue surface" aria-pressed="false" data-layer="2"></button>
+      <button class="dot" style="background:var(--lime)" aria-label="Lime surface" aria-pressed="false" data-layer="3"></button>
+      <button class="dot" style="background:var(--violet)" aria-label="Violet surface" aria-pressed="false" data-layer="4"></button>
+      <button class="dot" style="background:var(--blue)" aria-label="Blue surface" aria-pressed="false" data-layer="5"></button>
+      <button class="dot" style="background:var(--red)" aria-label="Red surface" aria-pressed="false" data-layer="6"></button>
+    </div>
+  </div></div>
+</div>
+
+<main>
+  <section>
+    <p class="eyebrow">How it plays</p>
+    <h2>The liquid is a vacuum</h2>
+    <div class="cols">
+      <p>The first touch plants a seed. From it grows a cluster of stepped, hollow, square crystals under a film of oxide that turns colour with the light. The crystal breathes; every breath is a deep ring through the water.</p>
+      <p>Where waves pile up, pairs of quicksilver drops rise and, if nobody looks, sink back as though they had never been. Touching a drop is an observation: the pair becomes real. One drop spirals into the crystal and feeds it, the other escapes and is heard.</p>
+      <p>Everything drifts towards disorder. The way back is a word: three things done in order, then the same three again. The world sings a word back, folds the newest qubits into one white one, and grows quiet. It does not pay twice for the same word.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Seven surfaces, four languages</p>
+    <h2>Cut the world and it turns over</h2>
+    <p>One straight stroke from edge to edge cuts the world in two, crystal and all. The piece holding less of the crystal falls away; the other turns over on the cut until its edge faces you and shows the strata beneath. The next surface spreads out from the cut, and each one hears something else. A word is always the side of the crystal and whether it came on the breath.</p>
+    <div class="langs">
+      <div class="lang"><div class="chips"><span class="chip" style="background:var(--clear)"></span></div><h3>Looks</h3><p>Clear hears where you look: which side of the crystal, on the breath or not.</p></div>
+      <div class="lang"><div class="chips"><span class="chip" style="background:var(--lilac)"></span><span class="chip" style="background:var(--violet)"></span><span class="chip" style="background:var(--red)"></span></div><h3>Strings</h3><p>Draw a circle on still water and a pair born inside it falls in entangled, joined by a string of light. Pluck the strings on the breath.</p></div>
+      <div class="lang"><div class="chips"><span class="chip" style="background:var(--lightblue)"></span><span class="chip" style="background:var(--blue)"></span></div><h3>Spirals</h3><p>Send hoppers under the black surface; here they spiral back up within moments. The world hears where each one went down.</p></div>
+      <div class="lang"><div class="chips"><span class="chip" style="background:var(--lime)"></span></div><h3>Glints</h3><p>Between breaths, small lights tremble on the water. Catch one in a circle before it goes out.</p></div>
+    </div>
+    <p style="margin-top:22px">A cycle ends when three different surfaces have sung back: the crystal falls into the lens it bent and leaves one drop. Touch it and the next cycle grows in other colours. Leave it alone and it melts into black peace. There is one more way, and it is yours to find.</p>
+  </section>
+
+  <section>
+    <p class="eyebrow">The cut, frame by frame</p>
+    <figure>
+      <img src="cut.png" width="1470" height="1000" loading="lazy" alt="Fourteen frames: a stroke through the crystal, the piece falling away, the slab turning to show seven coloured strata, the new surface spreading, the crystal rising with a flat cut face.">
+      <figcaption>Rendered on a desktop bench with the same shaders the phone uses: the stroke, the piece that goes, the slab turning on the cut, the strata, the next surface spreading, and the crystal rising with a face of bare metal where the cut went through.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <p class="eyebrow">Made of</p>
+    <div class="facts">
+      <p><b>Computed, not drawn.</b> Every picture but the icon and every sound is made while the game runs. The package carries no image or sound files.</p>
+      <p><b>The press of a finger is all.</b> Look, pluck, sink, circle, cut. No buttons, no menus, no numbers. Back opens an eye in the corner; touch it and the game plays itself while you watch.</p>
+      <p><b>Small.</b> OpenGL ES 3.0, Java, built with a shell script. About three hundred kilobytes.</p>
+      <p><b>Needs</b> Android 8.0 or newer and a GPU with OpenGL ES 3.0. Zero-Clause BSD licence.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>Amalgam</span>
+  <a href="https://github.com/Shumtugle/amalgam/releases/latest">Latest release</a>
+  <a href="https://github.com/Shumtugle/amalgam/blob/main/CHANGELOG.md">Changes</a>
+</footer>
+
+<script>
+"use strict";
+// The water and the crystal, live. The wave equation is the game's own, step for step; the
+// glass, the crystal and the drops are drawn by the game's shader files, read from beside this page.
+(function () {
+  var TINT = [[1, 1, 1], [0.8, 0.58, 1], [0.55, 0.85, 1], [0.7, 1, 0.42], [0.62, 0.36, 1], [0.32, 0.48, 1], [1, 0.34, 0.32]];
+  var BEAT = 2.6, WINDOW = 0.25, STEP = 1 / 60;
+  var canvas = document.getElementById("glass");
+  var gl = canvas.getContext("webgl2", {antialias: true});
+  if (!gl) { document.getElementById("nogl").style.display = "flex"; return; }
+
+  // ---- the liquid: a damped wave equation on a coarse grid
+  var SPEED = 0.17, KEEP = 0.986, SLOPE = 300, HEIGHT = 60;
+  var cols = 0, rows = 0, cur, prev, texels;
+  function makeLiquid(c, r) {
+    cols = c; rows = r;
+    cur = new Float32Array(c * r); prev = new Float32Array(c * r); texels = new Uint8Array(c * r * 4);
+  }
+  function press(u, v, radius, depth) {
+    var cx = u * (cols - 1), cy = v * (rows - 1), r = Math.ceil(radius * 2.5);
+    var x0 = Math.max(1, (cx | 0) - r), x1 = Math.min(cols - 2, (cx | 0) + r);
+    var y0 = Math.max(1, (cy | 0) - r), y1 = Math.min(rows - 2, (cy | 0) + r), inv = 1 / (radius * radius);
+    for (var y = y0; y <= y1; y++) {
+      var dy = y - cy;
+      for (var x = x0; x <= x1; x++) { var dx = x - cx; cur[y * cols + x] -= depth * Math.exp(-(dx * dx + dy * dy) * inv); }
+    }
+  }
+  function stepLiquid() {
+    var c = cols, a = cur, b = prev;
+    for (var y = 1; y < rows - 1; y++) {
+      var i = y * c + 1;
+      for (var x = 1; x < c - 1; x++, i++) {
+        var lap = a[i - 1] + a[i + 1] + a[i - c] + a[i + c] - 4 * a[i];
+        b[i] = (2 * a[i] - b[i] + SPEED * lap) * KEEP;
+      }
+    }
+    prev = a; cur = b;
+  }
+  function pack(v) { var q = 128 + Math.round(v); return q < 0 ? 0 : q > 255 ? 255 : q; }
+  function encode() {
+    var c = cols, h = cur, t = texels;
+    for (var y = 0; y < rows; y++) {
+      var ym = y > 0 ? y - 1 : y, yp = y < rows - 1 ? y + 1 : y;
+      for (var x = 0; x < c; x++) {
+        var xm = x > 0 ? x - 1 : x, xp = x < c - 1 ? x + 1 : x, o = (y * c + x) * 4;
+        t[o] = pack((h[y * c + xp] - h[y * c + xm]) * 0.5 * SLOPE);
+        t[o + 1] = pack((h[yp * c + x] - h[ym * c + x]) * 0.5 * SLOPE);
+        t[o + 2] = pack(h[y * c + x] * HEIGHT);
+        t[o + 3] = 255;
+      }
+    }
+  }
+  function crest() {
+    var best = -1e9, bu = 0.5, bv = 0.5;
+    for (var i = 0; i < 48; i++) {
+      var x = 4 + ((Math.random() * (cols - 8)) | 0), y = 4 + ((Math.random() * (rows - 8)) | 0), h = cur[y * cols + x];
+      if (h > best) { best = h; bu = x / (cols - 1); bv = y / (rows - 1); }
+    }
+    return [bu, bv, best];
+  }
+
+  // ---- matrices, column-major, as the game builds them
+  function perspective(fovy, asp, near, far) {
+    var f = 1 / Math.tan(fovy * Math.PI / 360), m = new Float32Array(16);
+    m[0] = f / asp; m[5] = f; m[10] = (far + near) / (near - far); m[11] = -1; m[14] = 2 * far * near / (near - far);
+    return m;
+  }
+  function lookAt(e, t) {
+    var fx = t[0] - e[0], fy = t[1] - e[1], fz = t[2] - e[2], fl = Math.hypot(fx, fy, fz);
+    fx /= fl; fy /= fl; fz /= fl;
+    var sx = -fz, sy = 0, sz = fx, sl = Math.hypot(sx, sy, sz); sx /= sl; sy /= sl; sz /= sl;
+    var ux = sy * fz - sz * fy, uy = sz * fx - sx * fz, uz = sx * fy - sy * fx, m = new Float32Array(16);
+    m[0] = sx; m[4] = sy; m[8] = sz; m[1] = ux; m[5] = uy; m[9] = uz; m[2] = -fx; m[6] = -fy; m[10] = -fz;
+    m[12] = -(sx * e[0] + sy * e[1] + sz * e[2]); m[13] = -(ux * e[0] + uy * e[1] + uz * e[2]); m[14] = fx * e[0] + fy * e[1] + fz * e[2]; m[15] = 1;
+    return m;
+  }
+  function spinAround(a, c) {
+    var co = Math.cos(a), s = Math.sin(a), m = new Float32Array(16);
+    m[0] = co; m[8] = s; m[2] = -s; m[10] = co; m[5] = 1; m[15] = 1;
+    m[12] = c[0] - (co * c[0] + s * c[2]); m[14] = c[2] - (-s * c[0] + co * c[2]);
+    return m;
+  }
+  function mul(a, b) {
+    var o = new Float32Array(16);
+    for (var c = 0; c < 4; c++) for (var r = 0; r < 4; r++) {
+      var s = 0; for (var k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s;
+    }
+    return o;
+  }
+
+  // ---- GL
+  var progs = {}, fieldTex, tri, quad, mesh, meshVerts = 0, info = null;
+  function compile(type, src) {
+    var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  function program(v, f) {
+    var p = gl.createProgram(); gl.attachShader(p, compile(gl.VERTEX_SHADER, v)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, f));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    p.u = {}; return p;
+  }
+  function U(p, n) { return p.u[n] !== undefined ? p.u[n] : (p.u[n] = gl.getUniformLocation(p, n)); }
+  function text(name) { return fetch("shaders/" + name).then(function (r) { if (!r.ok) throw new Error(name); return r.text(); }); }
+
+  var names = ["common.glsl", "glass.vert", "glass.frag", "crystal.vert", "crystal.frag", "drop.vert", "drop.frag"];
+  Promise.all(names.map(text).concat([
+    fetch("crystal.json").then(function (r) { return r.json(); }),
+    fetch("crystal.bin").then(function (r) { return r.arrayBuffer(); })
+  ])).then(function (res) {
+    var src = {}; names.forEach(function (n, i) { src[n] = res[i]; });
+    var inc = function (s) { return s.replace("#include common", src["common.glsl"]); };
+    progs.glass = program(inc(src["glass.vert"]), inc(src["glass.frag"]));
+    progs.crystal = program(inc(src["crystal.vert"]), inc(src["crystal.frag"]));
+    progs.drop = program(inc(src["drop.vert"]), inc(src["drop.frag"]));
+    info = res[names.length];
+    mesh = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, mesh);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(res[names.length + 1]), gl.STATIC_DRAW);
+    meshVerts = info.verts;
+    tri = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, tri);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    fieldTex = gl.createTexture();
+    resize();
+    requestAnimationFrame(frame);
+  }).catch(function (e) {
+    document.getElementById("nogl").style.display = "flex";
+    if (window.console) console.warn(e);
+  });
+
+  // ---- the little world: breath, pairs, falling and escaping drops
+  var W = 0, H = 0, aspect = 2, cu = 0.5, cv = 0.45, layer = 0, time = 0, spin = 0.6;
+  var beatStart = BEAT * 0.5, lastBeat = -1, pulse = 0, flash = 0;
+  var pairs = [], flyers = [];
+  function resize() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    W = Math.round(w * dpr); H = Math.round(h * dpr);
+    canvas.width = W; canvas.height = H;
+    var a = h / w, wide = a < 1;
+    if (Math.abs(a - aspect) > 0.01 || !cur) {
+      aspect = a;
+      var c = wide ? 200 : 160;
+      makeLiquid(c, Math.max(24, Math.round(c * aspect)));
+      gl.bindTexture(gl.TEXTURE_2D, fieldTex);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      pairs = []; flyers = [];
+    }
+    // the crystal keeps clear of the words above it
+    cu = wide ? 0.68 : 0.5;
+    cv = wide ? 0.46 : 0.36;
+  }
+  window.addEventListener("resize", resize);
+
+  function fromBeat() { var t = time - beatStart, n = Math.floor(t / BEAT + 0.5); return t - n * BEAT; }
+
+  function camera() {
+    var fovy = 32, tanY = Math.tan(fovy * Math.PI / 360), tanX = tanY / aspect;
+    var fill = (0.45 + 0.4 * (1 - Math.exp(-info.mass * 0.25))) * (aspect < 1 ? 0.55 : 1);
+    var el = 52 * Math.PI / 180, across = info.across, upward = info.upward, mid = info.mid;
+    var tall = upward * Math.cos(el) + across * Math.sin(el);
+    var dist = Math.max(across / (fill * tanX), tall / ((aspect < 1 ? 0.5 : 0.42) * tanY));
+    var radius = Math.max(across, upward);
+    var eye = [mid[0], mid[1] + dist * Math.sin(el), mid[2] + dist * Math.cos(el)];
+    var proj = perspective(fovy, 1 / aspect, Math.max(0.05, dist - radius * 3), dist + radius * 3);
+    var model = spinAround(spin, mid);
+    return {mvp: mul(mul(proj, lookAt(eye, mid)), model), model: model, eye: eye};
+  }
+
+  function birth() {
+    if (pairs.length >= 3) return;
+    for (var t = 0; t < 6; t++) {
+      var c = crest(), x = c[0], y = c[1] * aspect;
+      var dx = x - cu, dy = y - cv * aspect;
+      if (dx * dx + dy * dy < 0.33 * 0.33 || x < 0.08 || x > 0.92 || y < 0.1 * aspect || y > 0.92 * aspect) continue;
+      // not under the words: the title and buttons on top, the hint and surfaces below
+      var v = y / aspect;
+      if (aspect < 1 ? (x < 0.52 && (v > 0.5 || v < 0.22)) : (v > 0.66 || v < 0.16)) continue;
+      var a = Math.random() * Math.PI;
+      pairs.push({x: x, y: y, ax: Math.cos(a), ay: Math.sin(a), age: 0, life: 1.9, film: 120 + Math.random() * 180});
+      return;
+    }
+  }
+
+  function observe(i) {
+    var p = pairs[i]; pairs.splice(i, 1);
+    var onBeat = Math.abs(fromBeat()) <= WINDOW, g = gap(p);
+    var a = {x: p.x + p.ax * g, y: p.y + p.ay * g}, b = {x: p.x - p.ax * g, y: p.y - p.ay * g};
+    var cx = cu, cy = cv * aspect;
+    var aFalls = (a.x - cx) * (a.x - cx) + (a.y - cy) * (a.y - cy) < (b.x - cx) * (b.x - cx) + (b.y - cy) * (b.y - cy);
+    var f = aFalls ? a : b, e = aFalls ? b : a;
+    var dx = f.x - cx, dy = f.y - cy, d = Math.hypot(dx, dy) + 1e-4, turn = (Math.random() < 0.5 ? 1 : -1) * 0.22;
+    flyers.push({kind: 0, x: f.x, y: f.y, vx: -dy / d * turn, vy: dx / d * turn, age: 0, film: p.film});
+    var ex = e.x - cx, ey = e.y - cy, ed = Math.hypot(ex, ey) + 1e-4;
+    flyers.push({kind: 1, x: e.x, y: e.y, vx: ex / ed * 0.25, vy: ey / ed * 0.25, age: 0, film: p.film});
+    if (onBeat) flash = Math.max(flash, 0.8);
+    bell(onBeat ? 196 : [293.66, 349.23, 392, 440, 523.25][(Math.random() * 5) | 0] * 2, onBeat ? 0.32 : 0.22, onBeat ? 2.4 : 1.1);
+  }
+  function gap(p) { return 0.085 * Math.min(1, p.age / 0.5); }
+
+  function update(dt) {
+    time += dt; spin += dt * 0.11;
+    flash = Math.max(0, flash - dt * 1.8);
+    var d = fromBeat(); pulse = Math.exp(-(d * d) / 0.09);
+    var beat = Math.floor((time - beatStart) / BEAT + 0.5);
+    if (beat !== lastBeat && d >= 0) { lastBeat = beat; press(cu, cv, 5, 0.3); birth(); }
+    if (Math.random() < dt * 0.15) birth();
+    for (var i = pairs.length - 1; i >= 0; i--) { pairs[i].age += dt; if (pairs[i].age >= pairs[i].life) pairs.splice(i, 1); }
+    var cx = cu, cy = cv * aspect;
+    for (var j = flyers.length - 1; j >= 0; j--) {
+      var f = flyers[j]; f.age += dt;
+      if (f.kind === 0) {
+        var dx = cx - f.x, dy = cy - f.y, dd = Math.hypot(dx, dy) + 1e-4;
+        f.vx += dx / dd * 0.9 * dt; f.vy += dy / dd * 0.9 * dt;
+        f.vx *= Math.exp(-dt * 0.8); f.vy *= Math.exp(-dt * 0.8);
+        if (dd < 0.06) { flyers.splice(j, 1); flash = Math.max(flash, 0.6); press(cu, cv, 3, 0.8); bell(1046.5, 0.1, 1.5); continue; }
+      } else if (f.age > 1.7) { flyers.splice(j, 1); continue; }
+      f.x += f.vx * dt; f.y += f.vy * dt;
+    }
+  }
+
+  // ---- drawing
+  function draw() {
+    var cam = camera();
+    gl.viewport(0, 0, W, H);
+    gl.disable(gl.DEPTH_TEST);
+    encode();
+    var p = progs.glass; gl.useProgram(p);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fieldTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, cols, rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+    gl.uniform1i(U(p, "uField"), 0);
+    gl.uniform4f(U(p, "uGlow"), cu, cv, 0.4 + 0.6 * pulse + flash, aspect);
+    gl.uniform1f(U(p, "uFilm"), 0); gl.uniform1f(U(p, "uLens"), 0.008);
+    gl.uniform3fv(U(p, "uLayer"), TINT[layer]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, tri);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // drops
+    p = progs.drop; gl.useProgram(p);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform1f(U(p, "uAspect"), aspect); gl.uniform3fv(U(p, "uLayer"), TINT[layer]); gl.uniform1f(U(p, "uDark"), 0);
+    function drop(x, y, r, a, film, dx, dy, st) {
+      gl.uniform2f(U(p, "uCenter"), x, y / aspect); gl.uniform1f(U(p, "uRadius"), r); gl.uniform1f(U(p, "uAlpha"), a);
+      gl.uniform1f(U(p, "uFilm"), film); gl.uniform2f(U(p, "uDir"), dx, dy); gl.uniform1f(U(p, "uStretch"), st);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+    pairs.forEach(function (q) {
+      var t = q.age / q.life, a = Math.min(1, q.age / 0.25) * (t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1), g = gap(q);
+      var r = 0.048 * (0.6 + 0.4 * Math.min(1, q.age / 0.4));
+      drop(q.x + q.ax * g, q.y + q.ay * g, r, a, q.film, 1, 0, 1);
+      drop(q.x - q.ax * g, q.y - q.ay * g, r, a, q.film, 1, 0, 1);
+    });
+    flyers.forEach(function (f) {
+      var sp = Math.hypot(f.vx, f.vy) + 1e-4, r = 0.048, st = 1 + Math.min(2.5, sp * 1.5);
+      if (f.kind === 0) { var dd = Math.hypot(cu - f.x, cv * aspect - f.y); r *= Math.max(0.15, Math.min(1, dd / 0.25)); }
+      drop(f.x, f.y, r, f.kind === 1 ? Math.max(0, 1 - f.age * 0.6) : 1, f.film, f.vx / sp, f.vy / sp, st);
+    });
+    gl.disable(gl.BLEND);
+
+    // the crystal
+    p = progs.crystal; gl.useProgram(p);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.uniformMatrix4fv(U(p, "uMvp"), false, cam.mvp); gl.uniformMatrix4fv(U(p, "uModel"), false, cam.model);
+    gl.uniform2f(U(p, "uShift"), cu * 2 - 1, cv * 2 - 1); gl.uniform3fv(U(p, "uEye"), cam.eye);
+    gl.uniform1f(U(p, "uPulse"), pulse); gl.uniform1f(U(p, "uFlash"), flash); gl.uniform1f(U(p, "uFilm"), 0);
+    gl.uniform1f(U(p, "uEntropy"), 0.08); gl.uniform1f(U(p, "uTime"), time % 1000);
+    gl.uniform1f(U(p, "uSink"), 0); gl.uniform1f(U(p, "uSinkDepth"), 0); gl.uniform1i(U(p, "uCutCount"), 0); gl.uniform1i(U(p, "uCap"), -1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, mesh);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 32, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 32, 24);
+    gl.drawArrays(gl.TRIANGLES, 0, meshVerts);
+    gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2);
+    gl.disable(gl.DEPTH_TEST);
+  }
+
+  var running = true, acc = 0, last = 0;
+  function frame(now) {
+    if (!running) return;
+    var dt = last ? Math.min(0.1, (now - last) / 1000) : STEP; last = now;
+    acc += dt;
+    var n = 0;
+    while (acc >= STEP && n < 4) { update(STEP); stepLiquid(); acc -= STEP; n++; }
+    if (n === 4) acc = 0;
+    draw();
+    requestAnimationFrame(frame);
+  }
+  // rest while nobody can see it
+  function setRunning(on) { if (on === running) return; running = on; last = 0; if (on && info) requestAnimationFrame(frame); }
+  if ("IntersectionObserver" in window)
+    new IntersectionObserver(function (e) { setRunning(e[0].isIntersecting && !document.hidden); }).observe(canvas);
+  document.addEventListener("visibilitychange", function () { setRunning(!document.hidden); });
+
+  // ---- touch
+  var lastX = 0, lastY = 0, down = false;
+  function at(e) {
+    var r = canvas.getBoundingClientRect();
+    return [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height];
+  }
+  canvas.addEventListener("pointerdown", function (e) {
+    if (!cur) return;
+    wake();
+    var p = at(e), x = p[0], y = p[1] * aspect;
+    down = true; lastX = e.clientX; lastY = e.clientY;
+    press(p[0], p[1], 2.6, 1.1);
+    var best = -1, bd = 0.11 * 0.11;
+    for (var i = 0; i < pairs.length; i++) {
+      var q = pairs[i], g = gap(q);
+      for (var s = -1; s <= 1; s += 2) {
+        var dx = q.x + q.ax * g * s - x, dy = q.y + q.ay * g * s - y, d2 = dx * dx + dy * dy;
+        if (d2 < bd) { bd = d2; best = i; }
+      }
+    }
+    if (best >= 0) observe(best);
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!down || !cur) return;
+    var dx = e.clientX - lastX, dy = e.clientY - lastY, step = canvas.clientWidth * 0.02;
+    if (dx * dx + dy * dy < step * step) return;
+    lastX = e.clientX; lastY = e.clientY;
+    var p = at(e); press(p[0], p[1], 2.2, 0.35);
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(function (n) { canvas.addEventListener(n, function () { down = false; }); });
+
+  // ---- the seven surfaces
+  var dots = document.querySelectorAll(".dot");
+  Array.prototype.forEach.call(dots, function (b) {
+    b.addEventListener("click", function () {
+      layer = +b.getAttribute("data-layer");
+      Array.prototype.forEach.call(dots, function (o) { o.setAttribute("aria-pressed", o === b ? "true" : "false"); });
+      press(cu, cv, 6, 1.2);
+    });
+  });
+
+  // ---- sound: synthesised bells, only after a touch
+  var audio = null;
+  function wake() {
+    if (audio) { if (audio.state === "suspended") audio.resume(); return; }
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) audio = new AC();
+  }
+  function bell(freq, level, decay) {
+    if (!audio) return;
+    var t = audio.currentTime, out = audio.createGain();
+    out.gain.value = level * 0.5; out.connect(audio.destination);
+    [[1, 1], [2.76, 0.4], [5.4, 0.18]].forEach(function (h) {
+      var o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = freq * h[0];
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(h[1], t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + decay / h[0] + 0.05);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + decay + 0.1);
+    });
+  }
+})();
+</script>
+</body>
+</html>

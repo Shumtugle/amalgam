@@ -22,9 +22,12 @@
 6. Commit and push. On the repository page, draft a new release with a new
    tag such as `v0.1`, paste the version's section of the changelog, and
    attach the APK.
-7. The project page, when there is one, is the `docs` folder. Once, in the
-   repository settings, set the pages source to the `docs` folder of the
-   main branch.
+7. The project page is the `docs` folder. It draws the water and the crystal with the
+   game's own shader files, copied beside it: if the shaders changed, copy `common.glsl`,
+   `glass.*`, `crystal.*` and `drop.*` from `assets/shaders` to `docs/shaders`. The page
+   carries no version number; its download button always leads to the latest release.
+8. Once, in the repository settings, set the pages source to the `docs` folder
+   of the main branch.
 
 The signing key never goes into the repository: `.gitignore` keeps keystores
 and packages out. Keep a copy of the key somewhere safe; without it there are
