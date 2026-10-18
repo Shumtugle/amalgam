@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6 — 2026-10-18
+
+The circle.
+
+- A closed circle drawn on the liquid holds its trace for a few seconds.
+- A pair born inside the circle is observed by the circle itself: it becomes real with no touch, cannot get out, and rings against the edge, higher for a smaller circle. Each ring brings a little resonance.
+- When the circle fades, both drops fall in together and settle as an entangled pair of qubits, joined by a faint line of light that shows through the metal. With no empty pits, they bind two qubits already there.
+- Send one entangled hopper under and its partner goes under in the same instant.
+- A long stroke has to be straight to open the edge-on galaxy, so a circle does not.
+
 ## 0.5 — 2026-10-18
 
 The deep.

@@ -36,7 +36,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private final float[] lastX = new float[10], lastY = new float[10];
 
     private int glass, crystal, drop, vista;
-    private int fieldTex, triBuf, settledBuf, activeBuf, quadBuf;
+    private int fieldTex, triBuf, settledBuf, activeBuf, quadBuf, threadBuf;
+    private int threadVerts;
     private final float[] drops = new float[World.maxDrops() * 8];
     private int settledVerts, settledVersion = -1;
     private float[] meshScratch;
@@ -121,11 +122,12 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         drop = program("drop.vert", "drop.frag");
         vista = program("glass.vert", "vista.frag");
         int[] ids = new int[4];
-        GLES30.glGenBuffers(4, ids, 0);
+        GLES30.glGenBuffers(5, ids, 0);
         triBuf = ids[0];
         settledBuf = ids[1];
         activeBuf = ids[2];
         quadBuf = ids[3];
+        threadBuf = ids[4];
         FloatBuffer quad = ByteBuffer.allocateDirect(8 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         quad.put(new float[] {-1, -1, 1, -1, -1, 1, 1, 1}).position(0);
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadBuf);
@@ -152,7 +154,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             Save.State r = restore;
             restore = null;
             world = new World(COLS, aspect, r != null ? r.seed : SystemClock.elapsedRealtime());
-            if (r != null && r.planted) world.restore(r.u, r.v, r.settled, r.grown, r.hues, r.entropy, r.pool, r.resonance, r.away);
+            if (r != null && r.planted) world.restore(r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away);
         }
         Liquid lq = world.liquid;
         fieldOut = ByteBuffer.allocateDirect(lq.texels.length).order(ByteOrder.nativeOrder());
@@ -308,6 +310,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             settledVersion = c.settledVersion;
             settledVerts = c.buildSettled(meshScratch);
             upload(settledBuf, settledVerts, GLES30.GL_STATIC_DRAW);
+            threadVerts = c.buildThreads(meshScratch);
+            if (threadVerts > 0) upload(threadBuf, threadVerts, GLES30.GL_STATIC_DRAW);
         }
         int activeVerts = c.buildMoving(meshScratch);
         if (activeVerts > 0) upload(activeBuf, activeVerts, GLES30.GL_DYNAMIC_DRAW);
@@ -328,6 +332,14 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(crystal, "uTime"), world.time % 1000f);
         drawMesh(settledBuf, settledVerts);
         drawMesh(activeBuf, activeVerts);
+        if (threadVerts > 0) {
+            // entanglement shows through the metal: no depth test, light added on top
+            GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+            GLES30.glEnable(GLES30.GL_BLEND);
+            GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE);
+            drawMesh(threadBuf, threadVerts);
+            GLES30.glDisable(GLES30.GL_BLEND);
+        }
     }
 
     private void upload(int buf, int verts, int usage) {

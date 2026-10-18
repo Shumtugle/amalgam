@@ -159,6 +159,25 @@ public final class MainActivity extends Activity {
                     sound.strikeLater(LOW * 3f, 0.16f, 3f, 1.2f);
                 }
                 break;
+            case World.EV_RING:
+                // the circle closes: a soft rising pair of notes
+                sound.strike(SCALE[2] * 2f, 0.16f, 1.4f);
+                sound.strikeLater(SCALE[4] * 2f, 0.14f, 1.6f, 0.12f);
+                tick();
+                break;
+            case World.EV_BOUNCE: {
+                // the circle rings like a bell: a small circle rings high
+                float f = Math.max(260f, Math.min(1400f, 70f / Math.max(0.05f, w.bounceSize)));
+                sound.strike(f, 0.13f, 0.5f);
+                break;
+            }
+            case World.EV_ENTANGLE:
+                // two qubits that share one fate: two notes struck as one
+                sound.strike(SCALE[0] * 2f, 0.32f, 2.2f);
+                sound.strike(SCALE[3] * 2f, 0.28f, 2.2f);
+                sound.strike(LOW * 2f, 0.3f, 1.6f);
+                thump(false);
+                break;
             case World.EV_BREATH:
                 // the breath must be heard, or nobody can look on it
                 sound.strike(LOW, 0.16f, 0.6f);

@@ -22,6 +22,11 @@ vec3 spectrum(float h) {
 
 void main() {
     vec3 n = normalize(vN);
+    if (vTag.y > 3.5) {
+        // entanglement: a faint cold filament that breathes with the crystal
+        o = vec4(vec3(0.32, 0.5, 0.85) * (0.45 + 0.4 * uPulse), 1.0);
+        return;
+    }
     if (vTag.y > 2.5) {
         // a qubit: light of its own, brighter towards the edges of each face
         vec3 v = normalize(uEye - vW);

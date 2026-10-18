@@ -16,7 +16,7 @@ final class Crystal {
     static final int MAX_HOPPERS = 48;
     static final int MAX_RINGS = 6;
     /** Vertices one hopper can produce: a slab plus four boxes per ring, 36 vertices a box. */
-    static final int HOPPER_VERTS = (2 + 4 * MAX_RINGS) * 36;
+    static final int HOPPER_VERTS = (3 + 4 * MAX_RINGS) * 36;
 
     static final class Hopper {
         /** Local frame in cluster space: right, up, forward, origin. Origin sits on the base. */
@@ -57,11 +57,29 @@ final class Crystal {
     int qubits;
     /** Colour of each seated qubit: its place in the spectrum when it arrived, or WHITE once fused. */
     final float[] hues = new float[MAX_HOPPERS];
+    /** For each qubit, the qubit it is entangled with, or -1. Qubit i sits in hopper i. */
+    final int[] partner = new int[MAX_HOPPERS];
+
+    /** Links two seated qubits: they now share a fate. */
+    void entangle(int a, int b) {
+        if (a == b || a < 0 || b < 0 || a >= qubits || b >= qubits) return;
+        partner[a] = b;
+        partner[b] = a;
+        settledVersion++;
+    }
+
+    private void untangle(int a) {
+        int b = partner[a];
+        if (b >= 0) partner[b] = -1;
+        partner[a] = -1;
+    }
+
     /** Hue of a qubit fused from several: the spectrum folded back into white light. */
     static final float WHITE = 2f;
 
     Crystal(long seed) {
         rnd = new Random(seed);
+        for (int i = 0; i < MAX_HOPPERS; i++) partner[i] = -1;
         Hopper root = new Hopper();
         root.f[0] = 1; root.f[4] = 1; root.f[8] = 1;
         root.size = 1f;
@@ -81,7 +99,7 @@ final class Crystal {
      * Rebuilds a saved cluster: the same seed gives the same hoppers in the same order,
      * so the count of finished ones and the growth of the last one are enough.
      */
-    void restore(int settled, float grown, float[] seatedHues) {
+    void restore(int settled, float grown, float[] seatedHues, int[] partners) {
         while (settledCount() < settled && active != null) {
             active.grown = 1f;
             settledVersion++;
@@ -90,6 +108,9 @@ final class Crystal {
         if (active != null) active.grown = Math.max(0f, Math.min(0.999f, grown));
         qubits = Math.min(seatedHues.length, settledCount());
         System.arraycopy(seatedHues, 0, hues, 0, qubits);
+        for (int i = 0; i < MAX_HOPPERS; i++) partner[i] = -1;
+        for (int i = 0; i < qubits && i < partners.length; i++)
+            if (partners[i] >= 0 && partners[i] < qubits) partner[i] = partners[i];
     }
 
     /**
@@ -99,6 +120,7 @@ final class Crystal {
     boolean seat() {
         if (qubits >= settledCount()) return false;
         hues[qubits] = Math.min(1f, qubits / (float) (MAX_HOPPERS - 1));
+        partner[qubits] = -1;
         qubits++;
         settledVersion++;
         return true;
@@ -111,6 +133,7 @@ final class Crystal {
     int fuse(int count) {
         int m = Math.min(count, qubits);
         if (m < 2) return 0;
+        for (int i = qubits - m; i < qubits; i++) untangle(i);
         qubits -= m - 1;
         hues[qubits - 1] = WHITE;
         settledVersion++;
@@ -266,6 +289,47 @@ final class Crystal {
         return v;
     }
 
+    /**
+     * The lines of light between entangled qubits. They are drawn over everything, through
+     * the crystal, because what links them is not inside the metal.
+     */
+    int buildThreads(float[] out) {
+        int v = 0;
+        for (int i = 0; i < qubits; i++) {
+            int j = partner[i];
+            if (j <= i || hoppers.get(i).sink > 0f || hoppers.get(j).sink > 0f) continue;
+            v = thread(out, v, hoppers.get(i), hoppers.get(j));
+        }
+        return v;
+    }
+
+    /** Where a settled hopper's qubit sits, written into p. */
+    private static void qubitAt(Hopper h, float[] p) {
+        float s = h.size, base = s * 0.18f, t = s / h.rings, step = t * 0.75f;
+        float y = base + step * (1f + h.jitter[h.rings - 1]) + t * 0.55f;
+        for (int k = 0; k < 3; k++) p[k] = h.f[9 + k] + h.f[3 + k] * y;
+    }
+
+    /** A thin line of light between two entangled qubits. */
+    private int thread(float[] out, int v, Hopper a, Hopper b) {
+        float[] pa = new float[3], pb = new float[3];
+        qubitAt(a, pa);
+        qubitAt(b, pb);
+        float dx = pb[0] - pa[0], dy = pb[1] - pa[1], dz = pb[2] - pa[2];
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 1e-3f) return v;
+        dx /= len; dy /= len; dz /= len;
+        // any axis not along the line, crossed twice, gives the other two edges of the frame
+        float ox = Math.abs(dy) < 0.9f ? 0f : 1f, oy = Math.abs(dy) < 0.9f ? 1f : 0f;
+        float ux = dy * 0f - dz * oy, uy = dz * ox - dx * 0f, uz = dx * oy - dy * ox;
+        float ul = (float) Math.sqrt(ux * ux + uy * uy + uz * uz);
+        ux /= ul; uy /= ul; uz /= ul;
+        float wx = dy * uz - dz * uy, wy = dz * ux - dx * uz, wz = dx * uy - dy * ux;
+        float[] f = {dx, dy, dz, ux, uy, uz, wx, wy, wz,
+                (pa[0] + pb[0]) * 0.5f, (pa[1] + pb[1]) * 0.5f, (pa[2] + pb[2]) * 0.5f};
+        return box(out, v, f, 0, 0, 0, len * 0.5f, 0.008f, 0.008f, 0f, THREAD);
+    }
+
     /** Writes what moves every frame: the growing hopper and those going under or coming up. */
     int buildMoving(float[] out) {
         int v = 0;
@@ -288,8 +352,21 @@ final class Crystal {
         if (under >= MAX_UNDER) return false;
         h.under = true;
         h.underSpin = spin;
+        // an entangled partner goes under in the same instant, wherever it is
+        if (i < qubits && partner[i] >= 0) {
+            Hopper o = hoppers.get(partner[i]);
+            if (o != active && !o.under) {
+                o.under = true;
+                o.underSpin = spin;
+            }
+        }
         settledVersion++;
         return true;
+    }
+
+    /** Whether hopper i holds a qubit entangled with another. */
+    boolean entangled(int i) {
+        return i < qubits && partner[i] >= 0;
     }
 
     /**
@@ -367,6 +444,8 @@ final class Crystal {
 
     /** Shade value that tells the shader a face belongs to a qubit; its film slot then holds the hue. */
     static final float QUBIT = 3f;
+    /** Shade value for the line between entangled qubits. */
+    static final float THREAD = 4f;
 
     /** A box centred at (x, y, z) in the frame, with half extents along right, up and forward. */
     private static int box(float[] out, int v, float[] f, float x, float y, float z,

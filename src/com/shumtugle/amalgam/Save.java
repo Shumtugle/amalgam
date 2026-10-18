@@ -15,6 +15,7 @@ final class Save {
         boolean planted;
         float u, v, grown, pool, resonance, entropy;
         float[] hues = new float[0];
+        int[] partners = new int[0];
         int settled;
         /** Seconds since the game was saved. */
         float away;
@@ -34,6 +35,12 @@ final class Save {
         s.v = p.getFloat("v", 0.5f);
         s.settled = p.getInt("settled", 0);
         s.entropy = p.getFloat("entropy", 0.1f);
+        String ps = p.getString("partners", "");
+        if (ps.length() > 0) {
+            String[] parts = ps.split(",");
+            s.partners = new int[parts.length];
+            for (int i = 0; i < parts.length; i++) s.partners[i] = Integer.parseInt(parts[i]);
+        }
         String hs = p.getString("hues", "");
         if (hs.length() > 0) {
             String[] parts = hs.split(",");
@@ -69,6 +76,12 @@ final class Save {
                 hs.append(k.hues[i]);
             }
             e.putString("hues", hs.toString());
+            StringBuilder ps = new StringBuilder();
+            for (int i = 0; i < k.qubits; i++) {
+                if (i > 0) ps.append(',');
+                ps.append(k.partner[i]);
+            }
+            e.putString("partners", ps.toString());
             e.putFloat("entropy", w.entropy);
             e.putFloat("grown", k.active != null ? k.active.grown : 1f);
             e.putFloat("pool", w.pool);

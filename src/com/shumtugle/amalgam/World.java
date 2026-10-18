@@ -29,7 +29,26 @@ final class World {
 
     static final int EV_PLANT = 1, EV_OBSERVE = 2, EV_OBSERVE_ON_BEAT = 3, EV_MISS = 4,
             EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9,
-            EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12;
+            EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15;
+
+    /**
+     * A circle drawn on the liquid holds for a while. A pair born inside it is observed by the
+     * circle itself: it becomes real with no touch, cannot get out, and rings against the edge.
+     * When the circle fades, both drops fall in together and settle as an entangled pair.
+     */
+    boolean ringOn;
+    float ringX, ringY, ringR, ringAge;
+    static final float RING_LIFE = 6f;
+    private float ringKeep;
+    /** The path of the current stroke, space units, to recognise a circle. */
+    private final float[] pathX = new float[96], pathY = new float[96];
+    private int pathN;
+    /** Bounce pitch for the sound: the smaller the circle, the higher it rings. */
+    float bounceSize;
+    /** Id of the next entangled pair, and the qubit already seated for a pair still falling. */
+    private int nextPair = 1;
+    private final int[] seatedFor = new int[MAX_FLYERS];
+    private final int[] seatedQubit = new int[MAX_FLYERS];
 
     // Visions of deep space that open through the liquid, each tied to an event.
     static final int WARP = 0, BLUE_GALAXY = 1, SUPERNOVA = 2, LAVA = 3, NEBULA = 4, STAR = 5, EDGE_GALAXY = 6;
@@ -70,7 +89,7 @@ final class World {
 
     // real drops in flight
     static final int MAX_FLYERS = 12;
-    private static final int FALLING = 0, ESCAPING = 1;
+    private static final int FALLING = 0, ESCAPING = 1, TRAPPED = 2;
 
     final Liquid liquid;
     final float aspect;
@@ -106,6 +125,9 @@ final class World {
     private final float[] fval = new float[MAX_FLYERS], fage = new float[MAX_FLYERS];
     private final float[] ffilm = new float[MAX_FLYERS], ftrail = new float[MAX_FLYERS];
     private final int[] fkind = new int[MAX_FLYERS];
+    /** Entangled pair a flyer belongs to, or 0. */
+    private final int[] fpair = new int[MAX_FLYERS];
+    private final float[] fbounce = new float[MAX_FLYERS];
     private final boolean[] fon = new boolean[MAX_FLYERS];
 
     /** Smoothed camera target and cluster extent, so growth never jerks the view. */
@@ -146,10 +168,10 @@ final class World {
      * Brings back a saved game. Away is how long the game was closed, in seconds;
      * the crystal grew a little by itself meanwhile.
      */
-    void restore(float u, float v, int settled, float grown, float[] hues, float savedEntropy,
+    void restore(float u, float v, int settled, float grown, float[] hues, int[] partners, float savedEntropy,
                  float savedPool, float savedResonance, float away) {
         plant(u, v);
-        crystal.restore(settled, grown, hues);
+        crystal.restore(settled, grown, hues, partners);
         entropy = Math.max(0f, Math.min(1f, savedEntropy));
         pool = savedPool + Math.min(AWAY_CAP, Math.max(0f, away) * TRICKLE);
         resonance = savedResonance;
@@ -164,6 +186,8 @@ final class World {
     void touch(float u, float v) {
         stroke = 0f;
         strokeSpent = false;
+        pathN = 0;
+        addPath(u, v * aspect);
         liquid.press(u, v, 2.6f, 1.1f);
         if (crystal == null) {
             plant(u, v);
@@ -196,10 +220,69 @@ final class World {
     void drag(float u, float v) {
         liquid.press(u, v, 2.2f, 0.35f);
         stroke += 0.02f;
-        if (stroke > 0.7f && !strokeSpent && crystal != null) {
+        addPath(u, v * aspect);
+        if (crystal == null) return;
+        if (closesCircle()) {
             strokeSpent = true;
-            maybeVision(EDGE_GALAXY, 0.6f);
+            pathN = 0;
+            return;
         }
+        // a long straight stroke, not a loop: the edge-on galaxy
+        if (stroke > 0.7f && !strokeSpent && pathN > 1) {
+            float dx = pathX[pathN - 1] - pathX[0], dy = pathY[pathN - 1] - pathY[0];
+            if (dx * dx + dy * dy > 0.5f * 0.5f) {
+                strokeSpent = true;
+                maybeVision(EDGE_GALAXY, 0.6f);
+            }
+        }
+    }
+
+    private void addPath(float x, float y) {
+        if (pathN == pathX.length) {
+            System.arraycopy(pathX, 1, pathX, 0, pathN - 1);
+            System.arraycopy(pathY, 1, pathY, 0, pathN - 1);
+            pathN--;
+        }
+        pathX[pathN] = x;
+        pathY[pathN] = y;
+        pathN++;
+    }
+
+    /**
+     * Whether the stroke has just come back round to where it began, roughly as a circle.
+     * If so, the circle starts to hold.
+     */
+    private boolean closesCircle() {
+        if (pathN < 12) return false;
+        float ex = pathX[pathN - 1], ey = pathY[pathN - 1];
+        // look for the start of the loop: an earlier point the stroke has come back to
+        for (int start = 0; start < pathN - 11; start++) {
+            float dx = ex - pathX[start], dy = ey - pathY[start];
+            if (dx * dx + dy * dy > 0.06f * 0.06f) continue;
+            int n = pathN - start;
+            float cx = 0, cy = 0;
+            for (int i = start; i < pathN; i++) { cx += pathX[i]; cy += pathY[i]; }
+            cx /= n;
+            cy /= n;
+            float mean = 0, sq = 0;
+            for (int i = start; i < pathN; i++) {
+                float r = (float) Math.hypot(pathX[i] - cx, pathY[i] - cy);
+                mean += r;
+                sq += r * r;
+            }
+            mean /= n;
+            float spread = (float) Math.sqrt(Math.max(0f, sq / n - mean * mean)) / mean;
+            if (mean < 0.07f || mean > 0.4f || spread > 0.28f) continue;
+            ringOn = true;
+            ringX = cx;
+            ringY = cy;
+            ringR = mean;
+            ringAge = 0f;
+            ringKeep = 0f;
+            event(EV_RING);
+            return true;
+        }
+        return false;
     }
 
     /** A touch on a hopper sends it under the black surface. */
@@ -326,6 +409,7 @@ final class World {
             fage[j] = 0f;
             ffilm[j] = film;
             ftrail[j] = 0f;
+            fpair[j] = 0;
             if (kind == FALLING) {
                 // a sideways push, so the fall becomes a tightening spiral rather than a line
                 float t = (rnd.nextBoolean() ? 1f : -1f) * 0.22f;
@@ -408,6 +492,20 @@ final class World {
             if (rnd.nextFloat() < 0.8f) birth(false);
         }
 
+        if (ringOn) {
+            ringAge += dt;
+            ringKeep += dt;
+            if (ringKeep > 0.45f && ringAge < RING_LIFE - 0.8f) {
+                // keep the trace on the water: a faint touch round the circle
+                ringKeep = 0f;
+                for (int k = 0; k < 12; k++) {
+                    float a = k * 0.5236f + ringAge;
+                    liquid.press(ringX + (float) Math.cos(a) * ringR, (ringY + (float) Math.sin(a) * ringR) / aspect, 1.5f, 0.12f);
+                }
+            }
+            if (ringAge >= RING_LIFE) ringOn = false;
+        }
+
         updatePairs(dt);
         updateFlyers(dt);
 
@@ -477,6 +575,13 @@ final class World {
         if (slot < 0) return;
         float x = 0, y = 0;
         boolean found = false;
+        if (ringOn && rnd.nextFloat() < 0.6f) {
+            // by chance, inside the circle
+            float a = rnd.nextFloat() * 6.2832f, r = ringR * 0.45f * rnd.nextFloat();
+            x = ringX + (float) Math.cos(a) * r;
+            y = ringY + (float) Math.sin(a) * r;
+            found = true;
+        }
         for (int tries = 0; tries < 6 && !found; tries++) {
             float h = liquid.crest(rnd, 48, tmp);
             if (h < CREST && !breath) return;
@@ -501,6 +606,31 @@ final class World {
         plife[slot] = PAIR_LIFE;
         pfilm[slot] = 120f + rnd.nextFloat() * 200f;
         liquid.press(x, y / aspect, 1.8f, -0.45f);
+        if (ringOn && Math.hypot(x - ringX, y - ringY) < ringR * 0.7f) trap(slot);
+    }
+
+    /** The circle observes a pair born inside it: both drops become real and stay in. */
+    private void trap(int i) {
+        pon[i] = false;
+        int id = nextPair++;
+        for (int s = -1; s <= 1; s += 2) {
+            for (int j = 0; j < MAX_FLYERS; j++) {
+                if (fon[j]) continue;
+                fon[j] = true;
+                fkind[j] = TRAPPED;
+                fx[j] = px[i] + pax[i] * 0.02f * s;
+                fy[j] = py[i] + pay[i] * 0.02f * s;
+                fvx[j] = pax[i] * 0.32f * s;
+                fvy[j] = pay[i] * 0.32f * s;
+                fval[j] = FALL_ENERGY;
+                fage[j] = 0f;
+                ffilm[j] = pfilm[i];
+                fpair[j] = id;
+                fbounce[j] = 0f;
+                break;
+            }
+        }
+        flash = Math.max(flash, 0.5f);
     }
 
     private boolean roomFor(float x, float y) {
@@ -546,13 +676,53 @@ final class World {
                     pool += fval[j];
                     flash = Math.max(flash, 0.6f);
                     liquid.press(crystalU(), crystalV(), 3.5f, 0.6f);
-                    if (crystal.seat()) {
+                    if (fpair[j] > 0) {
+                        // an entangled drop takes a pit if one is free, else it binds a qubit already there
+                        int q = -1;
+                        if (crystal.seat()) {
+                            entropy = Math.min(1f, entropy + ENTROPY_QUBIT);
+                            q = crystal.qubits - 1;
+                        } else {
+                            q = freeQubit(fpair[j]);
+                        }
+                        if (q >= 0 && joinPair(fpair[j], q)) event(EV_ENTANGLE);
+                        else event(q >= 0 ? EV_QUBIT : EV_ABSORB);
+                    } else if (crystal.seat()) {
                         entropy = Math.min(1f, entropy + ENTROPY_QUBIT);
                         event(EV_QUBIT);
                     } else {
                         event(EV_ABSORB);
                     }
                     continue;
+                }
+            } else if (fkind[j] == TRAPPED) {
+                // inside the circle: bounce off its edge, ringing, until the circle fades
+                if (!ringOn) {
+                    fkind[j] = FALLING;
+                    fage[j] = 0f;
+                    float t = 0.15f;
+                    fvx[j] = -dy / d * t;
+                    fvy[j] = dx / d * t;
+                    continue;
+                }
+                fbounce[j] -= dt;
+                float rx = fx[j] - ringX, ry = fy[j] - ringY;
+                float r = (float) Math.sqrt(rx * rx + ry * ry) + 1e-4f, edge = ringR * 0.82f;
+                if (r > edge) {
+                    float nx = rx / r, ny = ry / r, dot = fvx[j] * nx + fvy[j] * ny;
+                    if (dot > 0f) {
+                        fvx[j] -= 2f * dot * nx;
+                        fvy[j] -= 2f * dot * ny;
+                        fx[j] = ringX + nx * edge;
+                        fy[j] = ringY + ny * edge;
+                        if (fbounce[j] <= 0f) {
+                            fbounce[j] = 0.15f;
+                            resonance += 0.25f;
+                            bounceSize = ringR;
+                            liquid.press(fx[j], fy[j] / aspect, 1.4f, 0.25f);
+                            event(EV_BOUNCE);
+                        }
+                    }
                 }
             } else {
                 float sp = (float) Math.sqrt(fvx[j] * fvx[j] + fvy[j] * fvy[j]) + 1e-4f;
@@ -572,6 +742,39 @@ final class World {
             fx[j] += fvx[j] * dt;
             fy[j] += fvy[j] * dt;
         }
+    }
+
+    /** A seated qubit with no partner yet, other than one already taken by this pair; -1 if none. */
+    private int freeQubit(int id) {
+        int taken = -1;
+        for (int k = 0; k < MAX_FLYERS; k++) if (seatedFor[k] == id) taken = seatedQubit[k];
+        int n = crystal.qubits;
+        if (n == 0) return -1;
+        int start = rnd.nextInt(n);
+        for (int k = 0; k < n; k++) {
+            int q = (start + k) % n;
+            if (q != taken && crystal.partner[q] < 0) return q;
+        }
+        return -1;
+    }
+
+    /** Seats the second qubit of an entangled pair next to the first; true when the pair is whole. */
+    private boolean joinPair(int id, int qubit) {
+        for (int k = 0; k < MAX_FLYERS; k++) {
+            if (seatedFor[k] == id) {
+                seatedFor[k] = 0;
+                crystal.entangle(seatedQubit[k], qubit);
+                return true;
+            }
+        }
+        for (int k = 0; k < MAX_FLYERS; k++) {
+            if (seatedFor[k] == 0) {
+                seatedFor[k] = id;
+                seatedQubit[k] = qubit;
+                break;
+            }
+        }
+        return false;
     }
 
     private float gap(int i) {

@@ -10,6 +10,8 @@ A hopper grows as a frame round nothing: every finished one opens an empty pit. 
 
 Everything drifts towards disorder: more pairs, a trembling surface, a string out of tune. The way back is a pattern. The world listens to the order in which you look, which side of the crystal and whether on the breath; when a short run repeats, it sings it back, folds the newest qubits into one white one and grows quiet again. It does not reward the same pattern twice in a row for long, so the search never ends.
 
+Draw a circle on the liquid and it holds for a moment. A pair born inside it is observed by the circle itself and cannot get out; it rings against the edge, and when the circle fades both drops fall in together as an entangled pair of qubits, joined by a thread of light. Send one of them under and the other follows at once.
+
 The black is deep. A touch on a hopper sends it under, and it rises again half a turn later. Sometimes, on an event or for no reason, deep space shows through the liquid for a few seconds: a jump to light speed, a supernova, a lava world, a nebula, galaxies.
 
 The crystal breathes, and pairs rise on the breath. An observation made on the breath counts twice and rings a deep bell. As the crystal gains mass, it starts to bend the liquid round itself like a lens.
