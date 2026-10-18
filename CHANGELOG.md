@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 — 2026-10-18
+
+- Fixed: 0.6 stopped at start (one buffer more than its array had room for).
+- If the game ever stops, the next start shows why, with a button to copy the report.
+- Smooth steps in the visions no longer run with reversed edges, which is undefined on some graphics drivers.
+
 ## 0.6 — 2026-10-18
 
 The circle.

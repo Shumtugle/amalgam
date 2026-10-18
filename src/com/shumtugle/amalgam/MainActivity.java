@@ -27,6 +27,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Crash.install(getApplicationContext());
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                 | WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -40,6 +41,24 @@ public final class MainActivity extends Activity {
             thud = vibrator.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_THUD);
         Log.i("Amalgam", "vibrator: amplitude " + (vibrator != null && vibrator.hasAmplitudeControl())
                 + ", thud " + thud);
+        String report = Crash.pending(this);
+        if (report != null) {
+            Crash.show(this, report, new Runnable() {
+                @Override
+                public void run() {
+                    startGame();
+                    stage.resumeClock();
+                    stage.onResume();
+                    sound.start();
+                    hideBars();
+                }
+            });
+            return;
+        }
+        startGame();
+    }
+
+    private void startGame() {
         stage = new Stage(this);
         stage.setRestore(Save.load(this));
         setContentView(stage);
@@ -48,6 +67,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (stage == null) return;
         hideBars();
         stage.resumeClock();
         stage.onResume();
@@ -56,6 +76,10 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (stage == null) {
+            super.onPause();
+            return;
+        }
         stage.onPause();
         // the render thread is paused now, so the world holds still while it is written down
         Save.store(this, stage.world());

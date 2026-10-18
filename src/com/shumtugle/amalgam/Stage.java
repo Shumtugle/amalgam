@@ -121,7 +121,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         crystal = program("crystal.vert", "crystal.frag");
         drop = program("drop.vert", "drop.frag");
         vista = program("glass.vert", "vista.frag");
-        int[] ids = new int[4];
+        int[] ids = new int[5];
         GLES30.glGenBuffers(5, ids, 0);
         triBuf = ids[0];
         settledBuf = ids[1];
