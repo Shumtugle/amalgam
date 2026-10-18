@@ -18,6 +18,9 @@ final class Save {
         int[] partners = new int[0];
         int settled, generation, epoch, played, watched, layer, heard;
         int[] lostAt = new int[0];
+        /** The planes the crystal was cut along, four numbers each, and when each was made. */
+        float[] cuts = new float[0];
+        int[] cutAt = new int[0];
         /** Seconds since the game was saved. */
         float away;
     }
@@ -42,6 +45,18 @@ final class Save {
             String[] parts = ls.split(",");
             s.lostAt = new int[parts.length];
             for (int i = 0; i < parts.length; i++) s.lostAt[i] = Integer.parseInt(parts[i]);
+        }
+        String cs = p.getString("cuts", "");
+        if (cs.length() > 0) {
+            String[] parts = cs.split(",");
+            s.cuts = new float[parts.length];
+            for (int i = 0; i < parts.length; i++) s.cuts[i] = Float.parseFloat(parts[i]);
+        }
+        String ca = p.getString("cutAt", "");
+        if (ca.length() > 0) {
+            String[] parts = ca.split(",");
+            s.cutAt = new int[parts.length];
+            for (int i = 0; i < parts.length; i++) s.cutAt[i] = Integer.parseInt(parts[i]);
         }
         s.watched = p.getInt("watched", 0);
         s.u = p.getFloat("u", 0.5f);
@@ -110,6 +125,17 @@ final class Save {
                 ls.append(k.hoppers.get(i).lostAt);
             }
             e.putString("lost", ls.toString());
+            StringBuilder cs = new StringBuilder(), ca = new StringBuilder();
+            for (int i = 0; i < k.cutCount; i++) {
+                for (int j = 0; j < 4; j++) {
+                    if (cs.length() > 0) cs.append(',');
+                    cs.append(k.cuts[i * 4 + j]);
+                }
+                if (i > 0) ca.append(',');
+                ca.append(k.cutAt[i]);
+            }
+            e.putString("cuts", cs.toString());
+            e.putString("cutAt", ca.toString());
             e.putFloat("entropy", w.entropy);
             e.putFloat("grown", k.active != null ? k.active.grown : 1f);
             e.putFloat("pool", w.pool);

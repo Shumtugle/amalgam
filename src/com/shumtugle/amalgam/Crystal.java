@@ -87,12 +87,55 @@ final class Crystal {
     }
 
     /**
-     * Cuts away hopper i: it and its qubit are gone, and its partner is set free. The growing
-     * hopper is never cut; it is still being born.
+     * Planes the world was cut along this cycle, in cluster space: a, b, c, d with
+     * a x + b y + c z + d > 0 on the side that fell away. Each holds from the moment the cluster
+     * had cutAt[k] hoppers, so a saved game replays its growth round the same scars.
      */
+    static final int MAX_CUTS = 8;
+    final float[] cuts = new float[MAX_CUTS * 4];
+    final int[] cutAt = new int[MAX_CUTS];
+    int cutCount;
+
+    /** Whether a point of the cluster lies on a side that has fallen away. */
+    boolean beyond(float x, float y, float z) {
+        for (int k = 0; k < cutCount; k++) {
+            if (cutAt[k] > hoppers.size()) continue;
+            int o = k * 4;
+            if (cuts[o] * x + cuts[o + 1] * y + cuts[o + 2] * z + cuts[o + 3] > 0f) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Cuts the cluster along a plane. Every hopper whose middle is on the far side goes, the
+     * growing one too; whatever straddles the plane keeps only its near part, and the renderer
+     * shows the cut face. Returns how many hoppers went.
+     */
+    int cutAlong(float a, float b, float c, float d) {
+        if (cutCount < MAX_CUTS) {
+            int o = cutCount * 4;
+            cuts[o] = a; cuts[o + 1] = b; cuts[o + 2] = c; cuts[o + 3] = d;
+            cutAt[cutCount++] = hoppers.size();
+        }
+        int gone = 0;
+        boolean grower = false;
+        for (int i = 0; i < hoppers.size(); i++) {
+            Hopper h = hoppers.get(i);
+            if (h.lost || a * h.cx() + b * h.cy() + c * h.cz() + d <= 0f) continue;
+            if (h == active) grower = true;
+            cutAway(i);
+            gone++;
+        }
+        // the growing hopper went with the piece: the next one starts on what is left
+        if (grower) active = hoppers.size() < MAX_HOPPERS ? spawn() : null;
+        settledVersion++;
+        return gone;
+    }
+
+    /** Cuts away hopper i: it and its qubit are gone, and its partner is set free. */
     void cutAway(int i) {
         Hopper h = hoppers.get(i);
-        if (h == active || h.lost) return;
+        if (h.lost) return;
         h.lost = true;
         h.lostAt = hoppers.size();
         h.under = false;
@@ -129,15 +172,20 @@ final class Crystal {
      * Rebuilds a saved cluster: the same seed gives the same hoppers in the same order,
      * so the count of finished ones and the growth of the last one are enough.
      */
-    void restore(int settled, float grown, float[] seatedHues, int[] partners, int[] lostAt) {
+    void restore(int settled, float grown, float[] seatedHues, int[] partners, int[] lostAt,
+                 float[] savedCuts, int[] savedCutAt) {
+        cutCount = Math.min(MAX_CUTS, Math.min(savedCuts.length / 4, savedCutAt.length));
+        System.arraycopy(savedCuts, 0, cuts, 0, cutCount * 4);
+        System.arraycopy(savedCutAt, 0, cutAt, 0, cutCount);
         while (settledCount() < settled && active != null) {
-            // hoppers cut away go at the same point of growth as they did in play
+            active.grown = 1f;
+            // hoppers cut away go at the same point of growth as they did in play, the one
+            // that was growing included, before the next one is placed
             for (int k = 0; k < hoppers.size() && k < lostAt.length; k++)
-                if (lostAt[k] >= 0 && lostAt[k] <= hoppers.size() && !hoppers.get(k).lost && hoppers.get(k) != active) {
+                if (lostAt[k] >= 0 && lostAt[k] <= hoppers.size() && !hoppers.get(k).lost) {
                     hoppers.get(k).lost = true;
                     hoppers.get(k).lostAt = lostAt[k];
                 }
-            active.grown = 1f;
             settledVersion++;
             active = hoppers.size() < MAX_HOPPERS ? spawn() : null;
         }
@@ -236,7 +284,9 @@ final class Crystal {
 
     /** Places a new hopper on a face of an existing one. Falls back to a smaller one if crowded. */
     private Hopper spawn() {
-        for (int tries = 0; tries < 24; tries++) {
+        // a cut cluster has less room, so it gets more tries
+        int most = cutCount > 0 ? 64 : 24;
+        for (int tries = 0; tries < most; tries++) {
             // Recent hoppers are likelier parents, so the cluster reaches outwards instead of thickening.
             int n = hoppers.size();
             int pi = n - 1 - (int) (Math.abs(rnd.nextGaussian()) * Math.max(2, n * 0.35f));
@@ -283,7 +333,7 @@ final class Crystal {
             if (h.film > 300f) h.film -= 200f;
             fillJitter(h);
 
-            if (crowded(h, p)) continue;
+            if (crowded(h, p) || beyond(h.cx(), h.cy(), h.cz())) continue;
             hoppers.add(h);
             return h;
         }
@@ -553,6 +603,39 @@ final class Crystal {
     static final float QUBIT = 3f;
     /** Shade value for the line between entangled qubits. */
     static final float THREAD = 4f;
+    /** Shade value for the face a cut leaves: bare metal lying in the plane of the cut. */
+    static final float CAP = 5f;
+
+    /**
+     * A square lying in cut plane k, wide enough to cover the whole cluster: the renderer keeps
+     * only the part of it inside the metal. Writes six vertices into out; returns them.
+     */
+    int buildCap(int k, float[] out) {
+        int o = k * 4;
+        float a = cuts[o], b = cuts[o + 1], c = cuts[o + 2], d = cuts[o + 3];
+        float[] m = new float[3];
+        middle(m);
+        float[] e = new float[2];
+        reach(m[0], m[1], m[2], e);
+        // the middle of the cluster moved onto the plane, and two directions along it
+        float off = a * m[0] + b * m[1] + c * m[2] + d;
+        float px = m[0] - a * off, py = m[1] - b * off, pz = m[2] - c * off;
+        float ux, uy, uz;
+        if (Math.abs(b) < 0.9f) { ux = c; uy = 0f; uz = -a; } else { ux = 0f; uy = -c; uz = b; }
+        float ul = (float) Math.sqrt(ux * ux + uy * uy + uz * uz);
+        ux /= ul; uy /= ul; uz /= ul;
+        float vx = b * uz - c * uy, vy = c * ux - a * uz, vz = a * uy - b * ux;
+        float r = 2f * (e[0] + e[1]) + 1f;
+        ux *= r; uy *= r; uz *= r; vx *= r; vy *= r; vz *= r;
+        int v = 0;
+        v = vert(out, v, px - ux - vx, py - uy - vy, pz - uz - vz, a, b, c, 0f, CAP);
+        v = vert(out, v, px + ux - vx, py + uy - vy, pz + uz - vz, a, b, c, 0f, CAP);
+        v = vert(out, v, px + ux + vx, py + uy + vy, pz + uz + vz, a, b, c, 0f, CAP);
+        v = vert(out, v, px - ux - vx, py - uy - vy, pz - uz - vz, a, b, c, 0f, CAP);
+        v = vert(out, v, px + ux + vx, py + uy + vy, pz + uz + vz, a, b, c, 0f, CAP);
+        v = vert(out, v, px - ux + vx, py - uy + vy, pz - uz + vz, a, b, c, 0f, CAP);
+        return v;
+    }
 
     /** A box centred at (x, y, z) in the frame, with half extents along right, up and forward. */
     private static int box(float[] out, int v, float[] f, float x, float y, float z,
@@ -569,6 +652,13 @@ final class Crystal {
                 float px = c[0] + nx * half[axis], py = c[1] + ny * half[axis], pz = c[2] + nz * half[axis];
                 float ux = f[ua * 3] * half[ua], uy = f[ua * 3 + 1] * half[ua], uz = f[ua * 3 + 2] * half[ua];
                 float wx = f[va * 3] * half[va], wy = f[va * 3 + 1] * half[va], wz = f[va * 3 + 2] * half[va];
+                if (sgn < 0) {
+                    // keep every face wound counter-clockwise seen from outside, so the
+                    // renderer can tell an outer face from an inner one by winding alone
+                    float sx = ux, sy = uy, sz = uz;
+                    ux = wx; uy = wy; uz = wz;
+                    wx = sx; wy = sy; wz = sz;
+                }
                 v = vert(out, v, px - ux - wx, py - uy - wy, pz - uz - wz, nx, ny, nz, film, shade);
                 v = vert(out, v, px + ux - wx, py + uy - wy, pz + uz - wz, nx, ny, nz, film, shade);
                 v = vert(out, v, px + ux + wx, py + uy + wy, pz + uz + wz, nx, ny, nz, film, shade);

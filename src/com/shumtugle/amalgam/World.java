@@ -32,7 +32,7 @@ final class World {
             EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15,
             EV_PLUCK = 16, EV_COLLAPSE = 17, EV_SINGULARITY = 18,
             EV_PEACE = 19, EV_EYE = 20, EV_WATCH = 21, EV_WORD = 22, EV_RETURN = 23,
-            EV_CUT = 24, EV_LAYER = 25;
+            EV_CUT = 24, EV_LAYER = 25, EV_TURN = 26;
 
     /**
      * Surfaces. A straight stroke from edge to edge cuts the world in two: the smaller piece falls
@@ -50,9 +50,20 @@ final class World {
     int layersHeard;
     /** Seconds into a cut, or -1. */
     float cutAge = -1f;
-    static final float CUT_TIME = 2.6f;
+    /**
+     * The cut plays out in turns, seconds from the stroke: the world holds still while the
+     * renderer takes its picture; the piece that goes tips over and falls; the piece that stays
+     * turns on the cut as on a hinge until its cut face, the strata below, looks up; the next
+     * surface spreads from the cut; the crystal rises through it.
+     */
+    static final float CUT_HOLD = 0.12f, CUT_FALL = 0.2f, CUT_TURN = 1.25f, CUT_WASH = 2.75f,
+            CUT_RISE = 3.3f, CUT_TIME = 4.4f;
     /** The cut: a point on it and the normal towards the piece that falls away, space units. */
     float cutX, cutY, cutNX, cutNY;
+    /** Whether the cut has taken effect: what was on the far side is gone, the next surface is up. */
+    boolean cutDone;
+    /** Set by the renderer once it holds the picture of the world whole; the cut waits for it. */
+    volatile boolean pictured;
     private boolean cutSpent;
 
     static boolean listensToStrings(int layer) {
@@ -250,13 +261,14 @@ final class World {
      * the crystal grew a little by itself meanwhile.
      */
     void restore(int gen, int savedEpoch, float u, float v, int settled, float grown, float[] hues, int[] partners, float savedEntropy,
-                 float savedPool, float savedResonance, float away, int savedLayer, int savedHeard, int[] lostAt) {
+                 float savedPool, float savedResonance, float away, int savedLayer, int savedHeard, int[] lostAt,
+                 float[] cuts, int[] cutAt) {
         generation = gen;
         epoch = savedEpoch;
         plant(u, v);
         layer = Math.max(0, Math.min(LAYERS - 1, savedLayer));
         layersHeard = savedHeard;
-        crystal.restore(settled, grown, hues, partners, lostAt);
+        crystal.restore(settled, grown, hues, partners, lostAt, cuts, cutAt);
         entropy = Math.max(0f, Math.min(1f, savedEntropy));
         pool = savedPool + Math.min(AWAY_CAP, Math.max(0f, away) * TRICKLE);
         resonance = savedResonance;
@@ -440,36 +452,96 @@ final class World {
         return true;
     }
 
-    /** Cuts the world along the line through (x, y) with normal (nx, ny). The smaller piece goes. */
+    /**
+     * Cuts the world along the line through (x, y) with normal (nx, ny). The piece holding less
+     * of the crystal goes; with no crystal on either side, the smaller one. The world holds
+     * still for a moment first, so the picture of it whole can be taken.
+     */
     private void cut(float x, float y, float nx, float ny) {
-        // which side is smaller: count a grid of points over the screen
-        int plus = 0, all = 0;
-        for (int i = 0; i < 24; i++)
-            for (int j = 0; j < 48; j++) {
-                float px = (i + 0.5f) / 24f, py = (j + 0.5f) / 48f * aspect;
-                if ((px - x) * nx + (py - y) * ny > 0f) plus++;
-                all++;
-            }
-        if (plus * 2 > all) { nx = -nx; ny = -ny; }
+        camera(cMvp, cModel, cEye, cShift);
+        float plus = 0f, minus = 0f;
+        for (int i = 0; i < crystal.hoppers.size(); i++) {
+            Crystal.Hopper h = crystal.hoppers.get(i);
+            if (h.lost) continue;
+            float[] c = project(h.cx(), h.cy(), h.cz());
+            if (c == null) continue;
+            float m = h.size * h.size * Crystal.ease(h.grown);
+            if ((c[0] - x) * nx + (c[1] * aspect - y) * ny > 0f) plus += m;
+            else minus += m;
+        }
+        boolean flip;
+        if (Math.abs(plus - minus) > 1e-3f) {
+            flip = plus > minus;
+        } else {
+            // no crystal to weigh: count a grid of points over the screen
+            int more = 0, all = 0;
+            for (int i = 0; i < 24; i++)
+                for (int j = 0; j < 48; j++) {
+                    float px = (i + 0.5f) / 24f, py = (j + 0.5f) / 48f * aspect;
+                    if ((px - x) * nx + (py - y) * ny > 0f) more++;
+                    all++;
+                }
+            flip = more * 2 > all;
+        }
+        if (flip) { nx = -nx; ny = -ny; }
         cutX = x;
         cutY = y;
         cutNX = nx;
         cutNY = ny;
         cutAge = 0f;
-        // what was in the falling piece goes with it
+        cutDone = false;
+        pictured = false;
+        event(EV_CUT);
+    }
+
+    /** The cut takes effect: what was in the falling piece goes with it, the crystal too. */
+    private void cutThrough() {
+        cutDone = true;
+        float x = cutX, y = cutY, nx = cutNX, ny = cutNY;
         for (int i = 0; i < MAX_PAIRS; i++)
             if (pon[i] && (px[i] - x) * nx + (py[i] - y) * ny > 0f) pon[i] = false;
         for (int j = 0; j < MAX_FLYERS; j++)
             if (fon[j] && (fx[j] - x) * nx + (fy[j] - y) * ny > 0f) fon[j] = false;
         ringOn = false;
-        for (int i = 0; i < crystal.hoppers.size(); i++) {
-            Crystal.Hopper h = crystal.hoppers.get(i);
-            if (h.lost || h == crystal.active) continue;
-            float[] c = project(h.cx(), h.cy(), h.cz());
-            if (c != null && (c[0] - x) * nx + (c[1] * aspect - y) * ny > 0f) crystal.cutAway(i);
-        }
+        // The line on the glass is a plane through the eye. On screen a point of the cluster is
+        // at u = (X / W + shift.x) / 2 + 1 / 2, v likewise, where X, Y, W are rows of the camera
+        // matrix applied to it; the side test, times W, is linear in the point.
+        camera(cMvp, cModel, cEye, cShift);
+        float ka = 0.5f * nx, kb = 0.5f * aspect * ny;
+        float kw = (0.5f * cShift[0] + 0.5f - x) * nx + (0.5f * cShift[1] + 0.5f) * aspect * ny - y * ny;
+        float[] plane = new float[4];
+        for (int c = 0; c < 4; c++)
+            plane[c] = ka * cMvp[c * 4] + kb * cMvp[c * 4 + 1] + kw * cMvp[c * 4 + 3];
+        float len = (float) Math.sqrt(plane[0] * plane[0] + plane[1] * plane[1] + plane[2] * plane[2]);
+        if (len > 1e-6f) crystal.cutAlong(plane[0] / len, plane[1] / len, plane[2] / len, plane[3] / len);
         listener.reset();
-        event(EV_CUT);
+        // the next surface is up from now on; nobody sees it until the turn shows it
+        layer = (layer + 1) % LAYERS;
+        liquid.calm(0f);
+        boxAge = 1f;
+    }
+
+    /**
+     * How far from the cut the next surface has spread, space units, at a given moment of the
+     * cut: nothing until the strata face up, then running out fast and slowing, past every corner.
+     */
+    static float washReach(float age) {
+        if (age < CUT_WASH) return 0f;
+        return 3f * (1f - (float) Math.exp(-(age - CUT_WASH) * 1.1f));
+    }
+
+    /** How far under the surface the crystal is while it rises after a cut: 1 under, 0 up. */
+    float cutSink() {
+        // until the cut takes effect the crystal stands as it was: that is the picture taken
+        if (cutAge < 0f || !cutDone) return 0f;
+        float k = Math.max(0f, Math.min(1f, (cutAge - CUT_RISE) / (CUT_TIME - CUT_RISE)));
+        float a = 1f - k;
+        return a * a * (3f - 2f * a);
+    }
+
+    /** How deep the crystal goes for its rise, cluster units: deep enough to be gone. */
+    float sinkDepth() {
+        return 2.2f * upward;
     }
 
     /** RGB of the current surface, for drops and reflections. */
@@ -816,13 +888,15 @@ final class World {
 
         if (cutAge >= 0f) {
             // the world holds still while it is cut; then the next surface is there
+            float before = cutAge;
             cutAge += dt;
+            if (!cutDone && cutAge >= CUT_HOLD && (pictured || cutAge >= 0.5f)) cutThrough();
+            if (before < CUT_TURN && cutAge >= CUT_TURN) event(EV_TURN);
+            if (before < CUT_WASH && cutAge >= CUT_WASH) event(EV_LAYER);
             if (cutAge >= CUT_TIME) {
                 cutAge = -1f;
-                layer = (layer + 1) % LAYERS;
-                liquid.calm(0f);
-                boxAge = 1f;
-                event(EV_LAYER);
+                if (!cutDone) cutThrough();
+                measureBox();
             }
             return;
         }

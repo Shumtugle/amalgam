@@ -268,6 +268,12 @@ public final class MainActivity extends Activity {
                 sound.strikeLater(LOW, 0.8f, 2.2f, 0.6f);
                 thump(true);
                 break;
+            case World.EV_TURN:
+                // the world turns over on the cut: a slow grinding of stone
+                sound.strike(LOW * 0.75f, 0.45f, 2.6f);
+                sound.strikeLater(LOW * 0.5f, 0.35f, 2.2f, 0.35f);
+                thump(false);
+                break;
             case World.EV_LAYER:
                 // the new surface: an open fifth, higher on the surfaces that listen to strings
                 float base = World.listensToStrings(w.layer) ? LOW * 2f : LOW * 1.5f;

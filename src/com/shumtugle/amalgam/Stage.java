@@ -40,7 +40,16 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private int pendingCount;
     private final float[] lastX = new float[10], lastY = new float[10];
 
-    private int glass, crystal, drop, vista, eyeProg, wordProg, wordTex, starProg, cutProg;
+    private int glass, crystal, drop, vista, eyeProg, wordProg, wordTex, starProg, cutProg, slabProg;
+    /** The picture of the world taken at a cut, the top of the slab that turns. */
+    private int snapFbo, snapTex, snapDepth;
+    private boolean snapped;
+    private int slabBuf, capBuf;
+    private final float[] cap = new float[6 * Crystal.FLOATS];
+    private FloatBuffer capOut;
+    private final float[] slab = new float[64 * 4];
+    private FloatBuffer slabOut;
+    private final float[] cutPlanes = new float[Crystal.MAX_CUTS * 4];
     private final float[] strata = new float[21];
     private final float[] starAt = new float[2];
     private int fieldTex, triBuf, settledBuf, activeBuf, quadBuf, threadBuf;
@@ -65,7 +74,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         super(act);
         this.act = act;
         setEGLContextClientVersion(3);
-        setEGLConfigChooser(8, 8, 8, 8, 16, 0);
+        // stencil for the faces cuts leave in the crystal
+        setEGLConfigChooser(8, 8, 8, 8, 16, 8);
         setPreserveEGLContextOnPause(true);
         setRenderer(this);
         setRenderMode(RENDERMODE_CONTINUOUSLY);
@@ -160,14 +170,22 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         wordProg = program("word.vert", "word.frag");
         starProg = program("drop.vert", "star.frag");
         cutProg = program("glass.vert", "cut.frag");
+        slabProg = program("slab.vert", "slab.frag");
         wordTex = makeWord();
-        int[] ids = new int[5];
-        GLES30.glGenBuffers(5, ids, 0);
+        int[] ids = new int[7];
+        GLES30.glGenBuffers(7, ids, 0);
         triBuf = ids[0];
         settledBuf = ids[1];
         activeBuf = ids[2];
         quadBuf = ids[3];
         threadBuf = ids[4];
+        slabBuf = ids[5];
+        capBuf = ids[6];
+        capOut = ByteBuffer.allocateDirect(cap.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        slabOut = ByteBuffer.allocateDirect(slab.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        // a fresh context has none of the old objects
+        snapFbo = 0;
+        snapped = false;
         FloatBuffer quad = ByteBuffer.allocateDirect(8 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         quad.put(new float[] {-1, -1, 1, -1, -1, 1, 1, 1}).position(0);
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadBuf);
@@ -198,7 +216,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                 world.played = r.played;
                 world.watched = r.watched;
             }
-            if (r != null && r.planted) world.restore(r.generation, r.epoch, r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away, r.layer, r.heard, r.lostAt);
+            if (r != null && r.planted) world.restore(r.generation, r.epoch, r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away, r.layer, r.heard, r.lostAt, r.cuts, r.cutAt);
             else if (r != null) world.between(r.generation, r.epoch, r.resonance, r.layer);
         }
         Liquid lq = world.liquid;
@@ -217,6 +235,62 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             meshOut = ByteBuffer.allocateDirect(floats * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         }
         settledVersion = -1;
+        makeSnap(w, h);
+    }
+
+    /** A texture the size of the screen with a depth buffer, to take the picture of the world in. */
+    private void makeSnap(int w, int h) {
+        int[] ids = new int[1];
+        if (snapFbo != 0) {
+            ids[0] = snapFbo;
+            GLES30.glDeleteFramebuffers(1, ids, 0);
+            ids[0] = snapTex;
+            GLES30.glDeleteTextures(1, ids, 0);
+            ids[0] = snapDepth;
+            GLES30.glDeleteRenderbuffers(1, ids, 0);
+        }
+        GLES30.glGenTextures(1, ids, 0);
+        snapTex = ids[0];
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, snapTex);
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0,
+                GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE);
+        GLES30.glGenRenderbuffers(1, ids, 0);
+        snapDepth = ids[0];
+        GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, snapDepth);
+        GLES30.glRenderbufferStorage(GLES30.GL_RENDERBUFFER, GLES30.GL_DEPTH24_STENCIL8, w, h);
+        GLES30.glGenFramebuffers(1, ids, 0);
+        snapFbo = ids[0];
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, snapFbo);
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0,
+                GLES30.GL_TEXTURE_2D, snapTex, 0);
+        GLES30.glFramebufferRenderbuffer(GLES30.GL_FRAMEBUFFER, GLES30.GL_DEPTH_STENCIL_ATTACHMENT,
+                GLES30.GL_RENDERBUFFER, snapDepth);
+        if (GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) != GLES30.GL_FRAMEBUFFER_COMPLETE)
+            Log.w(TAG, "the picture for the cut cannot be taken; the cut will show without it");
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
+    }
+
+    /** Draws the world into the picture for the cut, as it stands at the stroke. */
+    private void takeSnap() {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, snapFbo);
+        GLES30.glViewport(0, 0, width, height);
+        GLES30.glClearColor(0f, 0f, 0f, 1f);
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT | GLES30.GL_STENCIL_BUFFER_BIT);
+        drawScene();
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
+        GLES30.glViewport(0, 0, width, height);
+    }
+
+    private void drawScene() {
+        drawGlass();
+        drawStars();
+        drawVision();
+        drawDrops();
+        drawCrystal();
     }
 
     @Override
@@ -235,6 +309,15 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             pendingCount = 0;
         }
 
+        // a cut has just been made: take the picture of the world whole before it falls apart
+        if (world.cutAge < 0f) {
+            snapped = false;
+        } else if (!snapped) {
+            takeSnap();
+            snapped = true;
+            world.pictured = true;
+        }
+
         // the world and the liquid run at a fixed rate whatever the display does
         // the watcher plays in quick time: more steps of the same size each frame
         accum += dt * world.speed();
@@ -251,13 +334,25 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         for (int i = 0; i < n; i++) act.onWorldEvent(events[i], world);
         act.onWorldFrame(world);
 
-        drawGlass();
-        drawStars();
-        drawVision();
-        drawDrops();
-        drawCrystal();
-        drawWord();
-        drawCut();
+        float age = world.cutAge;
+        if (age >= 0f && age < World.CUT_WASH) {
+            // the world is a slab turning over on the cut; nothing live shows
+            GLES30.glClearColor(0f, 0f, 0f, 1f);
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT);
+            drawSlab(0f);
+            drawCut(0f, 1f);
+        } else {
+            drawScene();
+            drawWord();
+            if (age >= 0f) {
+                // the new surface spreads from the cut over what is left of the slab, and the
+                // crystal rises through it
+                float reach = World.washReach(age);
+                float fade = 1f - clamp01((age - World.CUT_RISE) / (World.CUT_TIME - World.CUT_RISE));
+                if (reach < 3f) drawSlab(reach);
+                drawCut(reach, fade);
+            }
+        }
         drawEye();
 
         frames++;
@@ -365,9 +460,20 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glDisable(GLES30.GL_BLEND);
     }
 
-    /** The cut: the falling piece, the strata on its edge, the next colour washing in. */
-    private void drawCut() {
-        if (world.cutAge < 0f) return;
+    /** The colours of the strata, the next surface first. */
+    private void strata() {
+        // until the cut takes effect the next surface is one up from the present one
+        int first = world.cutDone ? world.layer : world.layer + 1;
+        for (int k = 0; k < World.LAYERS; k++) {
+            float[] c = World.TINT[(first + k) % World.LAYERS];
+            strata[k * 3] = c[0]; strata[k * 3 + 1] = c[1]; strata[k * 3 + 2] = c[2];
+        }
+    }
+
+    /** Over the slab: the line of the stroke, then the next colour spreading from the cut. */
+    private void drawCut(float reach, float fade) {
+        if (fade <= 0f && world.cutAge > 1f) return;
+        strata();
         GLES30.glDisable(GLES30.GL_DEPTH_TEST);
         GLES30.glEnable(GLES30.GL_BLEND);
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA);
@@ -381,15 +487,133 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniform2f(loc(cutProg, "uNormal"), world.cutNX, world.cutNY);
         GLES30.glUniform1f(loc(cutProg, "uAspect"), world.aspect);
         GLES30.glUniform1f(loc(cutProg, "uAge"), world.cutAge);
-        for (int k = 0; k < World.LAYERS; k++) {
-            float[] c = World.TINT[(world.layer + 1 + k) % World.LAYERS];
-            strata[k * 3] = c[0]; strata[k * 3 + 1] = c[1]; strata[k * 3 + 2] = c[2];
-        }
-        GLES30.glUniform3fv(loc(cutProg, "uStrata"), World.LAYERS, strata, 0);
-        float[] next = World.TINT[(world.layer + 1) % World.LAYERS];
-        GLES30.glUniform3f(loc(cutProg, "uNext"), next[0], next[1], next[2]);
+        GLES30.glUniform1f(loc(cutProg, "uReach"), reach);
+        GLES30.glUniform1f(loc(cutProg, "uFade"), fade);
+        GLES30.glUniform3f(loc(cutProg, "uNext"), strata[0], strata[1], strata[2]);
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3);
         GLES30.glDisable(GLES30.GL_BLEND);
+    }
+
+    /**
+     * The world as a slab during a cut, its top the picture taken at the stroke. The piece that
+     * goes tips over the cut and falls into the black; the piece that stays turns on the cut
+     * until its cut face, the strata, looks up.
+     */
+    private void drawSlab(float reach) {
+        float a = world.aspect, age = world.cutAge;
+        float cx = world.cutX, cy = world.cutY, nx = world.cutNX, ny = world.cutNY;
+        float tx = -ny, ty = nx;
+        // how deep the slab is: as far as the cut is from the farthest corner of the piece
+        // that goes, so the turned face covers the glass where that piece was
+        float thick = 0.3f, s0 = 1e9f, s1 = -1e9f;
+        for (int c = 0; c < 4; c++) {
+            float px = (c & 1) == 0 ? 0f : 1f, py = (c & 2) == 0 ? 0f : a;
+            thick = Math.max(thick, (px - cx) * nx + (py - cy) * ny);
+            float s = (px - cx) * tx + (py - cy) * ty;
+            s0 = Math.min(s0, s);
+            s1 = Math.max(s1, s);
+        }
+        strata();
+        GLES30.glEnable(GLES30.GL_DEPTH_TEST);
+        GLES30.glDepthFunc(GLES30.GL_LESS);
+        GLES30.glClear(GLES30.GL_DEPTH_BUFFER_BIT);
+        GLES30.glUseProgram(slabProg);
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, snapTex);
+        GLES30.glUniform1i(loc(slabProg, "uSnap"), 0);
+        GLES30.glUniform3fv(loc(slabProg, "uStrata"), World.LAYERS, strata, 0);
+        GLES30.glUniform1f(loc(slabProg, "uThick"), thick);
+        GLES30.glUniform1f(loc(slabProg, "uAlpha"), 1f);
+        GLES30.glUniform1f(loc(slabProg, "uReach"), reach);
+        GLES30.glUniform2f(loc(slabProg, "uRes"), width, height);
+        GLES30.glUniform2f(loc(slabProg, "uPoint"), cx, cy);
+        GLES30.glUniform2f(loc(slabProg, "uNormal"), nx, ny);
+        GLES30.glUniform1f(loc(slabProg, "uAspect"), a);
+        GLES30.glUniform1f(loc(slabProg, "uEyeHeight"), 1.8f);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, slabBuf);
+        GLES30.glEnableVertexAttribArray(0);
+        GLES30.glVertexAttribPointer(0, 4, GLES30.GL_FLOAT, false, 0, 0);
+        GLES30.glDisableVertexAttribArray(1);
+        GLES30.glDisableVertexAttribArray(2);
+
+        // the piece that goes: tipping faster and faster, then dropping out of sight
+        float f = clamp01((age - World.CUT_FALL) / 1.5f);
+        if (f < 1f) {
+            int n = piece(1f, cx, cy, nx, ny, tx, ty, s0, s1, thick);
+            uploadSlab(n);
+            GLES30.glUniform1f(loc(slabProg, "uSide"), -1f);
+            GLES30.glUniform1f(loc(slabProg, "uAngle"), -1.35f * f * f);
+            GLES30.glUniform1f(loc(slabProg, "uDrop"), 2.5f * f * f * f);
+            GLES30.glUniform1f(loc(slabProg, "uDim"), (1f - f) * (1f - f));
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, n);
+        }
+        // the piece that stays: turning on the cut until the strata face the eye
+        float k = clamp01((age - World.CUT_TURN) / (World.CUT_WASH - World.CUT_TURN));
+        float e = k * k * k * (k * (k * 6f - 15f) + 10f);
+        int n = piece(-1f, cx, cy, nx, ny, tx, ty, s0, s1, thick);
+        uploadSlab(n);
+        GLES30.glUniform1f(loc(slabProg, "uSide"), 1f);
+        GLES30.glUniform1f(loc(slabProg, "uAngle"), 1.5708f * e);
+        GLES30.glUniform1f(loc(slabProg, "uDrop"), 0f);
+        GLES30.glUniform1f(loc(slabProg, "uDim"), 1f);
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, n);
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+    }
+
+    private static float clamp01(float x) {
+        return x < 0f ? 0f : x > 1f ? 1f : x;
+    }
+
+    /**
+     * Writes one piece of the slab as triangles into slab[]: its top, the screen cut down to
+     * the side of the line where side times the distance across it is positive, and its cut face.
+     * Returns the vertex count.
+     */
+    private int piece(float side, float cx, float cy, float nx, float ny, float tx, float ty,
+                      float s0, float s1, float thick) {
+        float a = world.aspect;
+        float[] in = {0f, 0f, 1f, 0f, 1f, a, 0f, a};
+        float[] poly = new float[16];
+        int m = 0;
+        for (int i = 0; i < 4; i++) {
+            float ax = in[i * 2], ay = in[i * 2 + 1];
+            float bx = in[(i + 1) % 4 * 2], by = in[(i + 1) % 4 * 2 + 1];
+            float da = side * ((ax - cx) * nx + (ay - cy) * ny), db = side * ((bx - cx) * nx + (by - cy) * ny);
+            if (da >= 0f) { poly[m * 2] = ax; poly[m * 2 + 1] = ay; m++; }
+            if ((da >= 0f) != (db >= 0f)) {
+                float t = da / (da - db);
+                poly[m * 2] = ax + (bx - ax) * t;
+                poly[m * 2 + 1] = ay + (by - ay) * t;
+                m++;
+            }
+        }
+        int v = 0;
+        for (int i = 1; i + 1 < m; i++) {
+            v = slabVert(v, poly[0], poly[1], 0f, 0f);
+            v = slabVert(v, poly[i * 2], poly[i * 2 + 1], 0f, 0f);
+            v = slabVert(v, poly[i * 2 + 2], poly[i * 2 + 3], 0f, 0f);
+        }
+        float ax = cx + tx * s0, ay = cy + ty * s0, bx = cx + tx * s1, by = cy + ty * s1;
+        v = slabVert(v, ax, ay, 0f, 1f);
+        v = slabVert(v, bx, by, 0f, 1f);
+        v = slabVert(v, bx, by, -thick, 1f);
+        v = slabVert(v, ax, ay, 0f, 1f);
+        v = slabVert(v, bx, by, -thick, 1f);
+        v = slabVert(v, ax, ay, -thick, 1f);
+        return v;
+    }
+
+    private int slabVert(int v, float x, float y, float z, float face) {
+        int o = v * 4;
+        slab[o] = x; slab[o + 1] = y; slab[o + 2] = z; slab[o + 3] = face;
+        return v + 1;
+    }
+
+    private void uploadSlab(int verts) {
+        slabOut.position(0);
+        slabOut.put(slab, 0, verts * 4).position(0);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, slabBuf);
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, verts * 16, slabOut, GLES30.GL_STREAM_DRAW);
     }
 
     /** The eye in the corner, over everything. */
@@ -478,7 +702,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
     private void drawCrystal() {
         Crystal c = world.crystal;
-        if (c == null) return;
+        // under the new surface after a cut, before it rises, the crystal is out of sight
+        if (c == null || world.cutSink() > 0.98f) return;
         if (c.settledVersion != settledVersion) {
             settledVersion = c.settledVersion;
             settledVerts = c.buildSettled(meshScratch);
@@ -505,8 +730,16 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(crystal, "uFilm"), world.filmShift());
         GLES30.glUniform1f(loc(crystal, "uEntropy"), world.entropy);
         GLES30.glUniform1f(loc(crystal, "uTime"), world.time % 1000f);
+        int cuts = Math.min(Crystal.MAX_CUTS, c.cutCount);
+        System.arraycopy(c.cuts, 0, cutPlanes, 0, cuts * 4);
+        GLES30.glUniform4fv(loc(crystal, "uCuts"), Crystal.MAX_CUTS, cutPlanes, 0);
+        GLES30.glUniform1i(loc(crystal, "uCutCount"), cuts);
+        GLES30.glUniform1f(loc(crystal, "uSink"), world.cutSink());
+        GLES30.glUniform1f(loc(crystal, "uSinkDepth"), world.sinkDepth());
+        GLES30.glUniform1i(loc(crystal, "uCap"), -1);
         drawMesh(settledBuf, settledVerts);
         drawMesh(activeBuf, activeVerts);
+        for (int k = 0; k < cuts; k++) drawCap(c, k, activeVerts);
         if (threadVerts > 0) {
             // entanglement shows through the metal: no depth test, light added on top
             GLES30.glDisable(GLES30.GL_DEPTH_TEST);
@@ -515,6 +748,38 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             drawMesh(threadBuf, threadVerts);
             GLES30.glDisable(GLES30.GL_BLEND);
         }
+    }
+
+    /**
+     * The face cut k left in the metal. Counting along each ray the inner faces of the cut
+     * cluster against its outer faces tells where the ray meets the plane inside the metal;
+     * a square in the plane is drawn only there.
+     */
+    private void drawCap(Crystal c, int k, int activeVerts) {
+        GLES30.glEnable(GLES30.GL_STENCIL_TEST);
+        GLES30.glClear(GLES30.GL_STENCIL_BUFFER_BIT);
+        GLES30.glColorMask(false, false, false, false);
+        GLES30.glDepthMask(false);
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+        GLES30.glStencilFunc(GLES30.GL_ALWAYS, 0, 0xFF);
+        GLES30.glStencilOpSeparate(GLES30.GL_BACK, GLES30.GL_KEEP, GLES30.GL_KEEP, GLES30.GL_INCR_WRAP);
+        GLES30.glStencilOpSeparate(GLES30.GL_FRONT, GLES30.GL_KEEP, GLES30.GL_KEEP, GLES30.GL_DECR_WRAP);
+        drawMesh(settledBuf, settledVerts);
+        drawMesh(activeBuf, activeVerts);
+        GLES30.glColorMask(true, true, true, true);
+        GLES30.glDepthMask(true);
+        GLES30.glEnable(GLES30.GL_DEPTH_TEST);
+        GLES30.glStencilFunc(GLES30.GL_NOTEQUAL, 0, 0xFF);
+        GLES30.glStencilOp(GLES30.GL_KEEP, GLES30.GL_KEEP, GLES30.GL_KEEP);
+        int n = c.buildCap(k, cap);
+        capOut.position(0);
+        capOut.put(cap, 0, n * Crystal.FLOATS).position(0);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, capBuf);
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, n * Crystal.FLOATS * 4, capOut, GLES30.GL_STREAM_DRAW);
+        GLES30.glUniform1i(loc(crystal, "uCap"), k);
+        drawMesh(capBuf, n);
+        GLES30.glUniform1i(loc(crystal, "uCap"), -1);
+        GLES30.glDisable(GLES30.GL_STENCIL_TEST);
     }
 
     private void upload(int buf, int verts, int usage) {

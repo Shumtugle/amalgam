@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.1 — 2026-10-18
+
+The cut, as it was meant to be.
+
+- The cut goes through the crystal. The line on the glass becomes a plane through the metal: everything beyond it is gone, the growing hopper too, and what straddles it keeps a flat face of bare, pale metal that turns with the cluster. New hoppers do not grow past an old cut.
+- The piece that falls is the one holding less of the crystal; with no crystal on either side, the smaller one. Cutting beside the crystal still costs nothing.
+- The world is a slab now. The piece that goes tips over the cut and drops into the black; the piece that stays turns over on the cut until its edge faces you, showing the strata of the surfaces below; the next one spreads out from the cut, and the crystal rises through it.
+- A low grinding as the world turns over.
+- The eye cuts beside the crystal and through it, in turn.
+- Cuts are saved with the game.
+
 ## 1.2 — 2026-10-18
 
 The cut.

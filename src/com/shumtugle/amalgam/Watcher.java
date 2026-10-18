@@ -9,8 +9,8 @@ import java.util.Random;
  * 1. Touch the water once to plant the crystal.
  * 2. Where the drops are plain quicksilver, look at drops only on the breath; repeat the sides
  *    of your last three looks until the world sings them back.
- * 3. Cut the world with one straight stroke from edge to edge, close to the edge farthest from
- *    the crystal, so the crystal stays on the larger side.
+ * 3. Cut the world with one straight stroke from edge to edge, beside the crystal or through
+ *    it; the side holding less of the crystal falls away.
  * 4. Read the new colour. Lilac, violet or red listen to strings: if fewer than two strings
  *    stretch between qubits, draw a circle on still water away from the crystal and wait for it
  *    to catch a pair, until there are two; then pluck three strings in turn, each on a breath,
@@ -149,13 +149,43 @@ final class Watcher {
         w.touchAs(drops[pick * 8], drops[pick * 8 + 1]);
     }
 
-    /** Step 3: a straight stroke from edge to edge, near the edge farthest from the crystal. */
+    /**
+     * Step 3: a straight stroke from edge to edge. Every other one goes beside the crystal, near
+     * the far edge; the rest go through it, a little off its middle and at a slant.
+     */
     private void planCut() {
-        float y = w.crystalV() < 0.5f ? 1f - 0.11f / w.aspect : 0.11f / w.aspect;
-        pathN = 34;
+        float a = w.aspect;
+        // the line through (px, py) in space units, along (dx, dy)
+        float px, py, dx, dy;
+        if (cutsDone % 2 == 0) {
+            px = 0.5f;
+            py = w.crystalV() < 0.5f ? a - 0.11f : 0.11f;
+            dx = 1f;
+            dy = 0f;
+        } else {
+            px = w.crystalU() + (rnd.nextFloat() - 0.5f) * 0.12f;
+            py = w.crystalV() * a + (rnd.nextFloat() - 0.5f) * 0.12f;
+            double t = (rnd.nextBoolean() ? 0.0 : Math.PI * 0.5) + (rnd.nextFloat() - 0.5f) * 0.9f;
+            dx = (float) Math.cos(t);
+            dy = (float) Math.sin(t);
+        }
+        // where the line enters and leaves the glass, just inside its edges
+        float lo = -1e9f, hi = 1e9f;
+        if (Math.abs(dx) > 1e-4f) {
+            float t0 = (0.02f - px) / dx, t1 = (0.98f - px) / dx;
+            lo = Math.max(lo, Math.min(t0, t1));
+            hi = Math.min(hi, Math.max(t0, t1));
+        }
+        if (Math.abs(dy) > 1e-4f) {
+            float t0 = (0.02f - py) / dy, t1 = (a - 0.02f - py) / dy;
+            lo = Math.max(lo, Math.min(t0, t1));
+            hi = Math.min(hi, Math.max(t0, t1));
+        }
+        pathN = 40;
         for (int i = 0; i < pathN; i++) {
-            pathU[i] = 0.02f + 0.96f * i / (pathN - 1);
-            pathV[i] = y;
+            float s = lo + (hi - lo) * i / (pathN - 1);
+            pathU[i] = px + dx * s;
+            pathV[i] = (py + dy * s) / a;
         }
         pathAt = 0;
         cutsDone++;
