@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1 — 2026-10-18
+
+- Adaptive icon: a dark background layer and the hopper inside the safe zone, so every icon shape a launcher uses cuts the same black, with no white around it. A one-colour layer for themed icons too.
+
 ## 0.8 — 2026-10-18
 
 The price of order, and the end of a cycle.
