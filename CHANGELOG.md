@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2 — 2026-10-18
+
+- The eye's game ends differently.
+- After a collapse, the next cycle begins from a touch on the drop itself; a touch beside it no longer starts one.
+
 ## 1.2.1 — 2026-10-18
 
 The cut, as it was meant to be.

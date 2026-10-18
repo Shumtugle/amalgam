@@ -8,6 +8,7 @@ uniform float uAlpha;
 uniform float uFilm;
 uniform vec2 uDir;
 uniform vec3 uLayer;   // colour of the current surface: drops take it
+uniform float uDark;   // the black world growing inside the drop a collapse leaves
 
 void main() {
     float d2 = dot(vLocal, vLocal);
@@ -25,6 +26,8 @@ void main() {
     vec3 col = tint * (0.03 + e + room) * fres;
     // the black liquid shows as a dark band round the edge
     col *= (1.0 - smoothstep(0.6, 1.0, d2)) * 0.6 + 0.4;
+    // turned, it fills with black from the middle; only its rim stays a mirror
+    col = mix(col, col * smoothstep(0.55, 1.0, d2) * 0.7, uDark);
     float a = (1.0 - smoothstep(0.86, 1.0, d2)) * uAlpha;
     o = vec4(tonemap(col), a);
 }

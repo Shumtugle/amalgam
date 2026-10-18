@@ -31,8 +31,8 @@ final class World {
             EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9,
             EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15,
             EV_PLUCK = 16, EV_COLLAPSE = 17, EV_SINGULARITY = 18,
-            EV_PEACE = 19, EV_EYE = 20, EV_WATCH = 21, EV_WORD = 22, EV_RETURN = 23,
-            EV_CUT = 24, EV_LAYER = 25, EV_TURN = 26;
+            EV_PEACE = 19, EV_EYE = 20, EV_WATCH = 21, EV_RETURN = 23,
+            EV_CUT = 24, EV_LAYER = 25, EV_TURN = 26, EV_SPIN = 27, EV_SWALLOW = 28;
 
     /**
      * Surfaces. A straight stroke from edge to edge cuts the world in two: the smaller piece falls
@@ -82,10 +82,21 @@ final class World {
     float eye;
     private float eyeLeft;
     static final float EYE_U = 0.86f, EYE_TOP = 0.13f, EYE_R = 0.055f;
-    /** Seconds into the end of the watcher's game, or -1. */
-    float wordAge = -1f;
-    float wordU = 0.5f, wordV = 0.5f;
-    static final float WORD_TIME = 6f;
+    /**
+     * The drop turned round. A stroke circling the drop spins it, and every turn makes it bigger
+     * and darker; left alone it settles back. Turned far enough, it swells over everything and
+     * closes into black: a new world, still and silent, and the game starts from the beginning.
+     */
+    static final float DROP_TURNS = 4f, SWALLOW_TIME = 3.5f;
+    /** How far the drop has been turned, 0 to 1. */
+    float dropGrow;
+    /** The drop's own turn, radians. */
+    float dropSpin;
+    /** Seconds into the drop closing over the world, or -1. */
+    float swallowAge = -1f;
+    private float turnAngle;
+    private boolean turnOn;
+    private int turnQuarter;
 
     /**
      * Left alone, the drop a collapse leaves fades and is gone: the black of before the first
@@ -305,7 +316,7 @@ final class World {
 
     /** A finger came down at (u, v). Ignored while the watcher plays. */
     void touch(float u, float v) {
-        if (watcher != null || wordAge >= 0f) return;
+        if (watcher != null || swallowAge >= 0f) return;
         if (eye > 0.5f && onEye(u, v)) {
             watcher = new Watcher(this, seed ^ (long) (time * 1000f));
             eyeLeft = 0f;
@@ -330,7 +341,7 @@ final class World {
      * takes the game back from it. Returns true when the game should close.
      */
     boolean back() {
-        if (watcher != null && wordAge < 0f) {
+        if (watcher != null && swallowAge < 0f) {
             watcher = null;
             event(EV_RETURN);
             return false;
@@ -382,9 +393,14 @@ final class World {
         pathN = 0;
         addPath(u, v * aspect);
         liquid.press(u, v, 2.6f, 1.1f);
+        turnOn = false;
         if (crystal == null) {
-            // after a collapse the new cycle grows from the drop that was left
+            if (swallowAge >= 0f) return;
+            // after a collapse the new cycle grows from the drop that was left, touched on it;
+            // a touch beside it may be the start of a stroke round it
             if (dropLeft) {
+                float dx = u - dropX, dy = v * aspect - dropY, reach = dropRadius() * 1.6f + 0.06f;
+                if (dx * dx + dy * dy > reach * reach) return;
                 u = dropX;
                 v = dropY / aspect;
             }
@@ -420,13 +436,53 @@ final class World {
         liquid.press(u, v, 2.2f, 0.35f);
         stroke += 0.02f;
         addPath(u, v * aspect);
-        if (crystal == null) return;
+        if (crystal == null) {
+            if (dropLeft && swallowAge < 0f) turnDrop(u, v * aspect);
+            return;
+        }
         if (!cutSpent && cutsAcross()) return;
         if (closesCircle()) {
             strokeSpent = true;
             pathN = 0;
             return;
         }
+    }
+
+    /** Radius of the drop a collapse leaves, as a share of screen width, before it swallows. */
+    float dropRadius() {
+        return DROP * 1.4f * (1f + 3f * dropGrow);
+    }
+
+    /** A stroke round the drop turns it; a full turn's worth of them makes it a quarter bigger. */
+    private void turnDrop(float x, float y) {
+        float dx = x - dropX, dy = y - dropY;
+        float d = (float) Math.sqrt(dx * dx + dy * dy);
+        if (d < dropRadius() * 1.05f || d > 0.9f) {
+            turnOn = false;
+            return;
+        }
+        float a = (float) Math.atan2(dy, dx);
+        if (turnOn) {
+            float da = a - turnAngle;
+            if (da > Math.PI) da -= 2f * (float) Math.PI;
+            if (da < -Math.PI) da += 2f * (float) Math.PI;
+            if (Math.abs(da) < 1.2f) {
+                dropGrow = Math.min(1f, dropGrow + Math.abs(da) / (2f * (float) Math.PI * DROP_TURNS));
+                dropSpin += da;
+                dropAge = 0f;
+                int q = (int) (dropGrow * DROP_TURNS * 4f);
+                if (q != turnQuarter) {
+                    turnQuarter = q;
+                    event(EV_SPIN);
+                }
+                if (dropGrow >= 1f) {
+                    swallowAge = 0f;
+                    event(EV_SWALLOW);
+                }
+            }
+        }
+        turnAngle = a;
+        turnOn = true;
     }
 
     private boolean nearEdge(float x, float y) {
@@ -528,6 +584,13 @@ final class World {
     static float washReach(float age) {
         if (age < CUT_WASH) return 0f;
         return 3f * (1f - (float) Math.exp(-(age - CUT_WASH) * 1.1f));
+    }
+
+    /** How dark the drop a collapse leaves has turned: the black world growing inside it. */
+    float dropDark() {
+        if (!dropLeft || crystal != null) return 0f;
+        float k = swallowAge >= 0f ? Math.min(1f, swallowAge / (SWALLOW_TIME * 0.6f)) : 0f;
+        return Math.min(1f, 0.55f * dropGrow + k);
     }
 
     /** How far under the surface the crystal is while it rises after a cut: 1 under, 0 up. */
@@ -743,14 +806,36 @@ final class World {
 
     /** The drop is gone. Nothing is left, not even the count of cycles. */
     private void peace() {
+        startOver();
+        liquid.press(dropX, dropY / aspect, 2f, 0.25f);
+        event(EV_PEACE);
+    }
+
+    /**
+     * The drop has closed over everything: a new world, black and still, and not a sound.
+     * The game starts from the beginning; the eye, if it played, gives the game back.
+     */
+    private void swallowed() {
+        startOver();
+        liquid.calm(0f);
+        if (watcher != null) {
+            watcher = null;
+            event(EV_RETURN);
+        }
+    }
+
+    private void startOver() {
         dropLeft = false;
+        dropGrow = 0f;
+        dropSpin = 0f;
+        turnQuarter = 0;
+        turnOn = false;
+        swallowAge = -1f;
         layer = 0;
         generation = 0;
         resonance = 0f;
         entropy = 0.1f;
         epoch++;
-        liquid.press(dropX, dropY / aspect, 2f, 0.25f);
-        event(EV_PEACE);
     }
 
     /** Whether the cycle is over: a white crust on still water, or a cluster with every pit full. */
@@ -785,14 +870,10 @@ final class World {
         else played++;
         dropX = crystalX();
         dropY = crystalY();
-        dropLeft = watcher == null;
-        if (watcher != null) {
-            // the watcher's game does not end in a drop
-            wordAge = 0f;
-            wordU = crystalU();
-            wordV = crystalV();
-            event(EV_WORD);
-        }
+        dropLeft = true;
+        dropGrow = 0f;
+        dropSpin = 0f;
+        turnQuarter = 0;
         dropAge = 0f;
         crystal = null;
         collapse = -1f;
@@ -866,20 +947,15 @@ final class World {
         eyeLeft = Math.max(0f, eyeLeft - dt / speed());
         float eyeTarget = watcher != null || eyeLeft > 0f ? 1f : 0f;
         eye += (eyeTarget - eye) * Math.min(1f, dt * 4f / speed());
-        if (wordAge >= 0f) {
-            wordAge += dt;
-            if (wordAge >= WORD_TIME) {
-                wordAge = -1f;
-                watcher = null;
-                peace();
-                event(EV_RETURN);
-            }
-            return;
-        }
         if (watcher != null) watcher.step(dt);
         weary *= (float) Math.exp(-dt / 150f);
         if (crystal == null) {
-            if (dropLeft) {
+            if (swallowAge >= 0f) {
+                swallowAge += dt;
+                if (swallowAge >= SWALLOW_TIME) swallowed();
+            } else if (dropLeft) {
+                // let go, the drop settles back slowly; untouched long enough, it melts away
+                dropGrow = Math.max(0f, dropGrow - dt * 0.03f);
                 dropAge += dt;
                 if (dropAge >= DROP_WAIT) peace();
             }
@@ -1286,9 +1362,17 @@ final class World {
         if (dropLeft && crystal == null) {
             // the one drop a collapse leaves; it breathes slowly while it waits, then melts away
             float left = Math.max(0f, Math.min(1f, (DROP_WAIT - dropAge) / DROP_FADE));
-            float r = DROP * (1.4f + 0.12f * (float) Math.sin(time * 2.4f)) * (0.3f + 0.7f * left);
+            float r = DROP * (1.4f + 0.12f * (float) Math.sin(time * 2.4f)) * (0.3f + 0.7f * left) * (1f + 3f * dropGrow);
+            if (swallowAge >= 0f) {
+                // swelling over the whole glass
+                float k = swallowAge / SWALLOW_TIME;
+                r *= (float) Math.exp(2.4f * k * k);
+            }
+            // a spun drop flattens a little, so its turn shows
+            float flat = 1f + 0.22f * dropGrow;
             out[0] = dropX; out[1] = dropY / aspect; out[2] = r; out[3] = left;
-            out[4] = 200f + filmShift(); out[5] = 1f; out[6] = 0f; out[7] = 1f;
+            out[4] = 200f + filmShift();
+            out[5] = (float) Math.cos(dropSpin); out[6] = (float) Math.sin(dropSpin); out[7] = flat;
             n = 1;
         }
         for (int i = 0; i < MAX_PAIRS; i++) {

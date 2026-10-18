@@ -253,10 +253,14 @@ public final class MainActivity extends Activity {
                 sound.strikeLater(LOW * 3f, 0.25f, 2f, 0.3f);
                 thump(false);
                 break;
-            case World.EV_WORD:
-                sound.strike(SCALE[0] * 2f, 0.3f, 3f);
-                sound.strikeLater(SCALE[2] * 2f, 0.26f, 3f, 0.5f);
-                sound.strikeLater(SCALE[4] * 2f, 0.22f, 3f, 1.0f);
+            case World.EV_SPIN:
+                // each quarter turn of the drop a little higher
+                sound.strike(SCALE[w.dropGrow < 0.5f ? 2 : 4] * (1f + w.dropGrow), 0.07f, 0.8f);
+                break;
+            case World.EV_SWALLOW:
+                // the last sound there is: a long low note going out under the black
+                sound.strike(LOW * 0.5f, 0.5f, World.SWALLOW_TIME);
+                thump(true);
                 break;
             case World.EV_RETURN:
                 tick();

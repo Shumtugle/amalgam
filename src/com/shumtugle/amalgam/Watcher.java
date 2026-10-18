@@ -17,6 +17,7 @@ import java.util.Random;
  *    and the same three again. Any other colour: as in step 2.
  * 5. Once two surfaces have sung back: if the one under you listens to strings, cut once more.
  *    Then look at drops on the breath, repeating your sides, until the crystal falls in.
+ * 6. Turn the drop it leaves, round and round, until it has swallowed the world.
  *
  * It touches the world through the same calls a finger does.
  */
@@ -47,6 +48,10 @@ final class Watcher {
 
     void step(float dt) {
         if (!w.planted()) {
+            if (w.dropLeft) {
+                turnDrop();
+                return;
+            }
             // step 1
             w.touchAs(0.3f + 0.4f * rnd.nextFloat(), 0.3f + 0.4f * rnd.nextFloat());
             return;
@@ -82,6 +87,20 @@ final class Watcher {
                 }
                 break;
         }
+    }
+
+    // step 6: one long stroke round the drop, widening as the drop grows
+    private float turnAt = -1f;
+
+    private void turnDrop() {
+        if (w.swallowAge >= 0f) return;
+        float r = w.dropRadius() * 1.6f + 0.1f;
+        boolean start = turnAt < 0f;
+        if (start) turnAt = rnd.nextFloat() * 6.2832f;
+        else turnAt += 0.032f;
+        float u = w.dropX + (float) Math.cos(turnAt) * r, v = (w.dropY + (float) Math.sin(turnAt) * r) / w.aspect;
+        if (start) w.touchAs(u, v);
+        else w.dragAs(u, v);
     }
 
     private boolean heardHere() {
