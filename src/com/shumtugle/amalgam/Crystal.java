@@ -34,6 +34,10 @@ final class Crystal {
         boolean under;
         /** The cluster's turn when it went under; it comes back up half a turn later. */
         float underSpin;
+        /** Cut away with half of the world: gone for good. */
+        boolean lost;
+        /** How many hoppers there were when it was cut away, so a saved game can replay it; -1 if never. */
+        int lostAt = -1;
 
         float top() {
             return size * (0.18f + 0.75f);
@@ -74,6 +78,32 @@ final class Crystal {
         partner[a] = -1;
     }
 
+    /** Hue of a qubit whose hopper was cut away: it takes up its place and nothing else. */
+    static final float VOID = -1f;
+
+    /** Whether qubit i is real: seated, and in a hopper still there. */
+    boolean realQubit(int i) {
+        return i < qubits && hues[i] >= 0f && !hoppers.get(i).lost;
+    }
+
+    /**
+     * Cuts away hopper i: it and its qubit are gone, and its partner is set free. The growing
+     * hopper is never cut; it is still being born.
+     */
+    void cutAway(int i) {
+        Hopper h = hoppers.get(i);
+        if (h == active || h.lost) return;
+        h.lost = true;
+        h.lostAt = hoppers.size();
+        h.under = false;
+        h.sink = 0f;
+        if (i < qubits) {
+            untangle(i);
+            hues[i] = VOID;
+        }
+        settledVersion++;
+    }
+
     /** Hue of a qubit fused from several: the spectrum folded back into white light. */
     static final float WHITE = 2f;
 
@@ -99,13 +129,24 @@ final class Crystal {
      * Rebuilds a saved cluster: the same seed gives the same hoppers in the same order,
      * so the count of finished ones and the growth of the last one are enough.
      */
-    void restore(int settled, float grown, float[] seatedHues, int[] partners) {
+    void restore(int settled, float grown, float[] seatedHues, int[] partners, int[] lostAt) {
         while (settledCount() < settled && active != null) {
+            // hoppers cut away go at the same point of growth as they did in play
+            for (int k = 0; k < hoppers.size() && k < lostAt.length; k++)
+                if (lostAt[k] >= 0 && lostAt[k] <= hoppers.size() && !hoppers.get(k).lost && hoppers.get(k) != active) {
+                    hoppers.get(k).lost = true;
+                    hoppers.get(k).lostAt = lostAt[k];
+                }
             active.grown = 1f;
             settledVersion++;
             active = hoppers.size() < MAX_HOPPERS ? spawn() : null;
         }
         if (active != null) active.grown = Math.max(0f, Math.min(0.999f, grown));
+        for (int k = 0; k < hoppers.size() && k < lostAt.length; k++)
+            if (lostAt[k] >= 0 && hoppers.get(k) != active) {
+                hoppers.get(k).lost = true;
+                hoppers.get(k).lostAt = lostAt[k];
+            }
         qubits = Math.min(seatedHues.length, settledCount());
         System.arraycopy(seatedHues, 0, hues, 0, qubits);
         for (int i = 0; i < MAX_HOPPERS; i++) partner[i] = -1;
@@ -118,6 +159,12 @@ final class Crystal {
      * Returns whether it found a place.
      */
     boolean seat() {
+        // pits of hoppers cut away are skipped, keeping qubit i in hopper i
+        while (qubits < settledCount() && hoppers.get(qubits).lost) {
+            hues[qubits] = VOID;
+            partner[qubits] = -1;
+            qubits++;
+        }
         if (qubits >= settledCount()) return false;
         hues[qubits] = Math.min(1f, qubits / (float) (MAX_HOPPERS - 1));
         partner[qubits] = -1;
@@ -131,13 +178,22 @@ final class Crystal {
      * the spectrum clock steps back. Returns how many were fused, zero if there was nothing to fuse.
      */
     int fuse(int count) {
-        int m = Math.min(count, qubits);
-        if (m < 2) return 0;
-        for (int i = qubits - m; i < qubits; i++) untangle(i);
-        qubits -= m - 1;
-        hues[qubits - 1] = WHITE;
+        // the newest real qubits, walking back over the places of those cut away
+        int taken = 0, i = qubits - 1;
+        while (i >= 0 && taken < count) {
+            if (realQubit(i)) taken++;
+            if (taken < count) i--;
+        }
+        if (taken < 2) return 0;
+        if (i < 0) {
+            i = 0;
+            while (i < qubits && !realQubit(i)) i++;
+        }
+        for (int k = i; k < qubits; k++) untangle(k);
+        qubits = i + 1;
+        hues[i] = WHITE;
         settledVersion++;
-        return m;
+        return taken;
     }
 
     /** Sum of size squared times growth: how much crystal there is. */
@@ -145,6 +201,7 @@ final class Crystal {
         float m = 0;
         for (int i = 0; i < hoppers.size(); i++) {
             Hopper h = hoppers.get(i);
+            if (h.lost) continue;
             m += h.size * h.size * ease(h.grown);
         }
         return m;
@@ -185,6 +242,7 @@ final class Crystal {
             int pi = n - 1 - (int) (Math.abs(rnd.nextGaussian()) * Math.max(2, n * 0.35f));
             if (pi < 0) pi = rnd.nextInt(n);
             Hopper p = hoppers.get(pi);
+            if (p.lost) continue;
             // Near the parent's size, so generations do not shrink into gravel.
             float s = p.size * (0.74f + 0.34f * rnd.nextFloat()) * (tries < 16 ? 1f : 0.8f);
             s = Math.max(0.4f, Math.min(1.05f, s));
@@ -253,7 +311,7 @@ final class Crystal {
         for (int i = 0; i < hoppers.size(); i++) {
             Hopper h = hoppers.get(i);
             float g = ease(h.grown);
-            if (g <= 0) continue;
+            if (g <= 0 || h.lost) continue;
             float dx = h.cx() - cx, dy = h.cy() - cy, dz = h.cz() - cz;
             float r = h.size * g * 1.15f;
             across = Math.max(across, (float) Math.sqrt(dx * dx + dz * dz) + r);
@@ -268,6 +326,7 @@ final class Crystal {
         float sx = 0, sy = 0, sz = 0, sw = 0;
         for (int i = 0; i < hoppers.size(); i++) {
             Hopper h = hoppers.get(i);
+            if (h.lost) continue;
             float w = h.size * h.size * ease(h.grown) + 1e-4f;
             sx += h.cx() * w; sy += h.cy() * w; sz += h.cz() * w; sw += w;
         }
@@ -305,7 +364,8 @@ final class Crystal {
     /** Whether qubit i owns a visible string: it has a partner after it and neither is under. */
     boolean stringShown(int i) {
         int j = i < qubits ? partner[i] : -1;
-        return j > i && hoppers.get(i).sink <= 0f && hoppers.get(j).sink <= 0f;
+        return j > i && hoppers.get(i).sink <= 0f && hoppers.get(j).sink <= 0f
+                && !hoppers.get(i).lost && !hoppers.get(j).lost;
     }
 
     /** Both ends of the string owned by qubit i, in cluster space. */
@@ -393,7 +453,7 @@ final class Crystal {
     /** Sends a finished hopper under the surface. Returns false if it cannot go. */
     boolean submerge(int i, float spin) {
         Hopper h = hoppers.get(i);
-        if (h == active || h.under || h.sink > 0f) return false;
+        if (h == active || h.under || h.sink > 0f || h.lost) return false;
         int under = 0;
         for (int k = 0; k < hoppers.size(); k++) if (hoppers.get(k).under) under++;
         if (under >= MAX_UNDER) return false;
@@ -452,7 +512,7 @@ final class Crystal {
 
     private int emitHopper(Hopper h, int index, float[] out, int v) {
         float g = ease(h.grown);
-        if (g <= 0.001f || h.sink >= 0.999f) return v;
+        if (g <= 0.001f || h.sink >= 0.999f || h.lost) return v;
         int first = v;
         float s = h.size * g;
         float base = s * 0.18f;

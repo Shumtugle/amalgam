@@ -16,7 +16,8 @@ final class Save {
         float u, v, grown, pool, resonance, entropy;
         float[] hues = new float[0];
         int[] partners = new int[0];
-        int settled, generation, epoch, played, watched;
+        int settled, generation, epoch, played, watched, layer, heard;
+        int[] lostAt = new int[0];
         /** Seconds since the game was saved. */
         float away;
     }
@@ -34,6 +35,14 @@ final class Save {
         s.generation = p.getInt("generation", 0);
         s.epoch = p.getInt("epoch", 0);
         s.played = p.getInt("played", 0);
+        s.layer = p.getInt("layer", 0);
+        s.heard = p.getInt("heard", 0);
+        String ls = p.getString("lost", "");
+        if (ls.length() > 0) {
+            String[] parts = ls.split(",");
+            s.lostAt = new int[parts.length];
+            for (int i = 0; i < parts.length; i++) s.lostAt[i] = Integer.parseInt(parts[i]);
+        }
         s.watched = p.getInt("watched", 0);
         s.u = p.getFloat("u", 0.5f);
         s.v = p.getFloat("v", 0.5f);
@@ -73,6 +82,7 @@ final class Save {
         e.putInt("generation", w.generation + (falling ? 1 : 0));
         e.putFloat("resonance", w.resonance);
         e.putInt("epoch", w.epoch);
+        e.putInt("layer", w.layer);
         e.putInt("played", w.played + (falling && w.watcher == null ? 1 : 0));
         e.putInt("watched", w.watched + (falling && w.watcher != null ? 1 : 0));
         e.putBoolean("planted", w.planted() && !falling);
@@ -93,6 +103,13 @@ final class Save {
                 ps.append(k.partner[i]);
             }
             e.putString("partners", ps.toString());
+            e.putInt("heard", w.layersHeard);
+            StringBuilder ls = new StringBuilder();
+            for (int i = 0; i < k.hoppers.size(); i++) {
+                if (i > 0) ls.append(',');
+                ls.append(k.hoppers.get(i).lostAt);
+            }
+            e.putString("lost", ls.toString());
             e.putFloat("entropy", w.entropy);
             e.putFloat("grown", k.active != null ? k.active.grown : 1f);
             e.putFloat("pool", w.pool);

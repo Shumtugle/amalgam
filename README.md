@@ -16,6 +16,8 @@ Draw a circle on the liquid and it holds for a moment. A pair born inside it is 
 
 The black is deep. A touch on a hopper sends it under, and it rises again half a turn later. Sometimes, on an event or for no reason, deep space shows through the liquid for a few seconds: a jump to light speed, a supernova, a lava world, a nebula, galaxies.
 
+The world has layers. One straight stroke from edge to edge cuts it in two: the smaller piece falls away for good, with every drop and hopper on it, and the edge that stays shows the strata beneath for a moment before the next surface spreads across. The surfaces come in turn: clear, lilac, light blue, lime, violet, blue, red, and clear again; the drops take the colour of the surface they rise from. Each surface hears a different language. Lilac, violet and red do not listen to where you look but to the strings: pluck them on the breath in an order and repeat it. A cycle will not end until two different surfaces have sung back, so the world has to be cut at least once.
+
 Press back and an eye opens in the corner. Touch it, and the game plays itself while you watch.
 
 Every cycle that ends leaves a star in the deep. The stars show only through still water, and they stay.
@@ -26,7 +28,7 @@ There are no numbers on the screen. What you have gathered is heard, not read: a
 
 The game remembers the crystal when closed, and it grows a little while you are away.
 
-Materials of their own for later cycles (glass, light, living threads) come later; for now each cycle shifts the colours.
+Spirals and trembling glints, the languages of the other surfaces, come later; for now those surfaces listen as the clear one does.
 
 ## How it is made
 

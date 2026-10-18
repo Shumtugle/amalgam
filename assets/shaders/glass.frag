@@ -8,6 +8,7 @@ uniform sampler2D uField;   // r, g: slope; b: height; all offset by half
 uniform vec4 uGlow;         // xy: crystal on screen, z: glow strength, w: screen height over width
 uniform float uFilm;        // shifts every film thickness
 uniform float uLens;        // how strongly the crystal's mass bends the view round it
+uniform vec3 uLayer;        // colour of the current surface
 
 void main() {
     // Lensing: a point seen at distance r from the mass shows what lies closer to it.
@@ -25,6 +26,8 @@ void main() {
     float fres = 0.07 + 0.93 * pow(1.0 - n.z, 5.0);
     vec3 sheen = film(260.0 + h * 140.0 + uFilm, n.z);
     vec3 col = e * fres * mix(vec3(1.0), sheen, clamp(slope * 6.0, 0.0, 0.75));
+    // each surface reflects in its own colour
+    col *= mix(vec3(1.0), uLayer, 0.65);
 
     vec2 d = (vUv - uGlow.xy) * vec2(1.0, uGlow.w);
     float g = uGlow.z * exp(-dot(d, d) / 0.03);

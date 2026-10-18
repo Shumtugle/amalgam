@@ -29,6 +29,11 @@ final class Listener {
     final int[] pattern = new int[4];
     int patternLength;
 
+    /** Forgets the current run, as when the surface under it changes. */
+    void reset() {
+        count = 0;
+    }
+
     /** How many symbols are in the current run, since the last pattern. */
     int length() {
         return count;

@@ -40,7 +40,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private int pendingCount;
     private final float[] lastX = new float[10], lastY = new float[10];
 
-    private int glass, crystal, drop, vista, eyeProg, wordProg, wordTex, starProg;
+    private int glass, crystal, drop, vista, eyeProg, wordProg, wordTex, starProg, cutProg;
+    private final float[] strata = new float[21];
     private final float[] starAt = new float[2];
     private int fieldTex, triBuf, settledBuf, activeBuf, quadBuf, threadBuf;
     private int threadVerts;
@@ -158,6 +159,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         eyeProg = program("drop.vert", "eye.frag");
         wordProg = program("word.vert", "word.frag");
         starProg = program("drop.vert", "star.frag");
+        cutProg = program("glass.vert", "cut.frag");
         wordTex = makeWord();
         int[] ids = new int[5];
         GLES30.glGenBuffers(5, ids, 0);
@@ -196,8 +198,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                 world.played = r.played;
                 world.watched = r.watched;
             }
-            if (r != null && r.planted) world.restore(r.generation, r.epoch, r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away);
-            else if (r != null) world.between(r.generation, r.epoch, r.resonance);
+            if (r != null && r.planted) world.restore(r.generation, r.epoch, r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away, r.layer, r.heard, r.lostAt);
+            else if (r != null) world.between(r.generation, r.epoch, r.resonance, r.layer);
         }
         Liquid lq = world.liquid;
         fieldOut = ByteBuffer.allocateDirect(lq.texels.length).order(ByteOrder.nativeOrder());
@@ -255,6 +257,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         drawDrops();
         drawCrystal();
         drawWord();
+        drawCut();
         drawEye();
 
         frames++;
@@ -290,6 +293,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniform4f(loc(glass, "uGlow"), glowU, glowV, glow, world.aspect);
         GLES30.glUniform1f(loc(glass, "uFilm"), world.filmShift());
         GLES30.glUniform1f(loc(glass, "uLens"), world.lens());
+        float[] tint = world.tint();
+        GLES30.glUniform3f(loc(glass, "uLayer"), tint[0], tint[1], tint[2]);
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, triBuf);
         GLES30.glEnableVertexAttribArray(0);
         GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, 0);
@@ -360,6 +365,33 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glDisable(GLES30.GL_BLEND);
     }
 
+    /** The cut: the falling piece, the strata on its edge, the next colour washing in. */
+    private void drawCut() {
+        if (world.cutAge < 0f) return;
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+        GLES30.glEnable(GLES30.GL_BLEND);
+        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA);
+        GLES30.glUseProgram(cutProg);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, triBuf);
+        GLES30.glEnableVertexAttribArray(0);
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, 0);
+        GLES30.glDisableVertexAttribArray(1);
+        GLES30.glDisableVertexAttribArray(2);
+        GLES30.glUniform2f(loc(cutProg, "uPoint"), world.cutX, world.cutY / world.aspect);
+        GLES30.glUniform2f(loc(cutProg, "uNormal"), world.cutNX, world.cutNY);
+        GLES30.glUniform1f(loc(cutProg, "uAspect"), world.aspect);
+        GLES30.glUniform1f(loc(cutProg, "uAge"), world.cutAge);
+        for (int k = 0; k < World.LAYERS; k++) {
+            float[] c = World.TINT[(world.layer + 1 + k) % World.LAYERS];
+            strata[k * 3] = c[0]; strata[k * 3 + 1] = c[1]; strata[k * 3 + 2] = c[2];
+        }
+        GLES30.glUniform3fv(loc(cutProg, "uStrata"), World.LAYERS, strata, 0);
+        float[] next = World.TINT[(world.layer + 1) % World.LAYERS];
+        GLES30.glUniform3f(loc(cutProg, "uNext"), next[0], next[1], next[2]);
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3);
+        GLES30.glDisable(GLES30.GL_BLEND);
+    }
+
     /** The eye in the corner, over everything. */
     private void drawEye() {
         if (world.eye <= 0.01f) return;
@@ -426,6 +458,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glDisableVertexAttribArray(1);
         GLES30.glDisableVertexAttribArray(2);
         GLES30.glUniform1f(loc(drop, "uAspect"), world.aspect);
+        float[] tint = world.tint();
+        GLES30.glUniform3f(loc(drop, "uLayer"), tint[0], tint[1], tint[2]);
         int center = loc(drop, "uCenter"), radius = loc(drop, "uRadius"), alpha = loc(drop, "uAlpha");
         int film = loc(drop, "uFilm"), dir = loc(drop, "uDir"), stretch = loc(drop, "uStretch");
         for (int i = 0; i < n; i++) {
@@ -454,7 +488,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         int activeVerts = c.buildMoving(meshScratch);
         if (activeVerts > 0) upload(activeBuf, activeVerts, GLES30.GL_DYNAMIC_DRAW);
         // strings vibrate, so they are rebuilt every frame
-        threadVerts = c.buildThreads(meshScratch, world.time, world.strings);
+        threadVerts = world.stringsShown() ? c.buildThreads(meshScratch, world.time, world.strings) : 0;
         if (threadVerts > 0) upload(threadBuf, threadVerts, GLES30.GL_DYNAMIC_DRAW);
 
         world.camera(mvp, model, eye, shift);

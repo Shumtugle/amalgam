@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2 — 2026-10-18
+
+The cut.
+
+- One straight stroke from edge to edge cuts the world in two. The smaller piece darkens and falls away for good, taking the drops and hoppers on it; qubits in lost hoppers are gone too. The edge that stays shows the strata of the surfaces beneath, then the next surface washes across.
+- Seven surfaces in turn: clear, lilac, light blue, lime, violet, blue, red. Drops and reflections take the surface's colour. Strings show only on the clear surface and on those that hear them.
+- Lilac, violet and red listen to strings, not to looks: a pattern there is an order of plucks on the breath, repeated. The other surfaces listen to looks, as before.
+- A cycle ends only after patterns on two different surfaces.
+- The eye solves it the same way: it cuts, makes strings with circles where it needs them, plucks, and cuts again.
+- The surface, the surfaces heard and the hoppers lost are saved.
+
 ## 1.1 — 2026-10-18
 
 - The eye plays at a person's pace now, not in quick time.

@@ -261,6 +261,20 @@ public final class MainActivity extends Activity {
             case World.EV_RETURN:
                 tick();
                 break;
+            case World.EV_CUT:
+                // a long tearing glide down, and the weight of the piece falling away
+                for (int i = 0; i < 6; i++)
+                    sound.strikeLater(SCALE[(5 - i) % SCALE.length] * 2f, 0.18f, 0.9f, i * 0.07f);
+                sound.strikeLater(LOW, 0.8f, 2.2f, 0.6f);
+                thump(true);
+                break;
+            case World.EV_LAYER:
+                // the new surface: an open fifth, higher on the surfaces that listen to strings
+                float base = World.listensToStrings(w.layer) ? LOW * 2f : LOW * 1.5f;
+                sound.strike(base, 0.35f, 2.4f);
+                sound.strike(base * 1.5f, 0.25f, 2.4f);
+                tick();
+                break;
             case World.EV_BREATH:
                 // the breath must be heard, or nobody can look on it
                 sound.strike(LOW, 0.16f, 0.6f);

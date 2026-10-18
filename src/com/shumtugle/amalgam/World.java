@@ -31,7 +31,38 @@ final class World {
             EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9,
             EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15,
             EV_PLUCK = 16, EV_COLLAPSE = 17, EV_SINGULARITY = 18,
-            EV_PEACE = 19, EV_EYE = 20, EV_WATCH = 21, EV_WORD = 22, EV_RETURN = 23;
+            EV_PEACE = 19, EV_EYE = 20, EV_WATCH = 21, EV_WORD = 22, EV_RETURN = 23,
+            EV_CUT = 24, EV_LAYER = 25;
+
+    /**
+     * Surfaces. A straight stroke from edge to edge cuts the world in two: the smaller piece falls
+     * away for good, with whatever of the crystal was in it, and the cut face shows the next
+     * surface down. Surfaces come round in order, each with its own colour and its own way of
+     * listening. Clear ones hear which side of the crystal you look at; lilac, violet and red
+     * hear which strings you pluck on the breath.
+     */
+    static final int LAYERS = 7;
+    static final float[][] TINT = {
+            {1f, 1f, 1f}, {0.8f, 0.58f, 1f}, {0.55f, 0.85f, 1f}, {0.7f, 1f, 0.42f},
+            {0.62f, 0.36f, 1f}, {0.32f, 0.48f, 1f}, {1f, 0.34f, 0.32f}};
+    int layer;
+    /** The surfaces the world has heard a pattern on this cycle, one bit each. */
+    int layersHeard;
+    /** Seconds into a cut, or -1. */
+    float cutAge = -1f;
+    static final float CUT_TIME = 2.6f;
+    /** The cut: a point on it and the normal towards the piece that falls away, space units. */
+    float cutX, cutY, cutNX, cutNY;
+    private boolean cutSpent;
+
+    static boolean listensToStrings(int layer) {
+        return layer == 1 || layer == 4 || layer == 6;
+    }
+
+    /** Whether strings show on this surface: on clear ones and on those that listen to them. */
+    boolean stringsShown() {
+        return layer == 0 || listensToStrings(layer);
+    }
 
     /**
      * The eye in the top right corner. Back opens it for a while; a touch on it hands the game
@@ -201,6 +232,7 @@ final class World {
     }
 
     private void plant(float u, float v) {
+        layersHeard = 0;
         crystal = new Crystal(seed + generation * 7919L + epoch * 104729L);
         dropLeft = false;
         mid[0] = 0f; mid[1] = 0.5f; mid[2] = 0f;
@@ -218,11 +250,13 @@ final class World {
      * the crystal grew a little by itself meanwhile.
      */
     void restore(int gen, int savedEpoch, float u, float v, int settled, float grown, float[] hues, int[] partners, float savedEntropy,
-                 float savedPool, float savedResonance, float away) {
+                 float savedPool, float savedResonance, float away, int savedLayer, int savedHeard, int[] lostAt) {
         generation = gen;
         epoch = savedEpoch;
         plant(u, v);
-        crystal.restore(settled, grown, hues, partners);
+        layer = Math.max(0, Math.min(LAYERS - 1, savedLayer));
+        layersHeard = savedHeard;
+        crystal.restore(settled, grown, hues, partners, lostAt);
         entropy = Math.max(0f, Math.min(1f, savedEntropy));
         pool = savedPool + Math.min(AWAY_CAP, Math.max(0f, away) * TRICKLE);
         resonance = savedResonance;
@@ -234,7 +268,8 @@ final class World {
     }
 
     /** A saved game between cycles: the drop of the last collapse waits in the middle. */
-    void between(int gen, int savedEpoch, float savedResonance) {
+    void between(int gen, int savedEpoch, float savedResonance, int savedLayer) {
+        layer = Math.max(0, Math.min(LAYERS - 1, savedLayer));
         generation = gen;
         epoch = savedEpoch;
         resonance = savedResonance;
@@ -328,7 +363,8 @@ final class World {
 
     /** A touch, whoever makes it. */
     void touchAs(float u, float v) {
-        if (collapse >= 0f) return;
+        if (collapse >= 0f || cutAge >= 0f) return;
+        cutSpent = false;
         stroke = 0f;
         strokeSpent = false;
         pathN = 0;
@@ -368,23 +404,82 @@ final class World {
 
     /** A stroke, whoever makes it: ripples, and a long stroke may open a vision. */
     void dragAs(float u, float v) {
+        if (cutAge >= 0f) return;
         liquid.press(u, v, 2.2f, 0.35f);
         stroke += 0.02f;
         addPath(u, v * aspect);
         if (crystal == null) return;
+        if (!cutSpent && cutsAcross()) return;
         if (closesCircle()) {
             strokeSpent = true;
             pathN = 0;
             return;
         }
-        // a long straight stroke, not a loop: the edge-on galaxy
-        if (stroke > 0.7f && !strokeSpent && pathN > 1) {
-            float dx = pathX[pathN - 1] - pathX[0], dy = pathY[pathN - 1] - pathY[0];
-            if (dx * dx + dy * dy > 0.5f * 0.5f) {
-                strokeSpent = true;
-                maybeVision(EDGE_GALAXY, 0.6f);
+    }
+
+    private boolean nearEdge(float x, float y) {
+        return x < 0.07f || x > 0.93f || y < 0.07f || y > aspect - 0.07f;
+    }
+
+    /**
+     * Whether the stroke has just crossed the world from one edge to another in a straight line.
+     * If so, the world is cut along it.
+     */
+    private boolean cutsAcross() {
+        if (pathN < 8) return false;
+        float ax = pathX[0], ay = pathY[0], bx = pathX[pathN - 1], by = pathY[pathN - 1];
+        if (!nearEdge(ax, ay) || !nearEdge(bx, by)) return false;
+        float lx = bx - ax, ly = by - ay, len = (float) Math.sqrt(lx * lx + ly * ly);
+        if (len < 0.8f) return false;
+        float nx = -ly / len, ny = lx / len;
+        for (int i = 0; i < pathN; i++)
+            if (Math.abs((pathX[i] - ax) * nx + (pathY[i] - ay) * ny) > 0.06f) return false;
+        cutSpent = true;
+        strokeSpent = true;
+        cut(ax, ay, nx, ny);
+        return true;
+    }
+
+    /** Cuts the world along the line through (x, y) with normal (nx, ny). The smaller piece goes. */
+    private void cut(float x, float y, float nx, float ny) {
+        // which side is smaller: count a grid of points over the screen
+        int plus = 0, all = 0;
+        for (int i = 0; i < 24; i++)
+            for (int j = 0; j < 48; j++) {
+                float px = (i + 0.5f) / 24f, py = (j + 0.5f) / 48f * aspect;
+                if ((px - x) * nx + (py - y) * ny > 0f) plus++;
+                all++;
             }
+        if (plus * 2 > all) { nx = -nx; ny = -ny; }
+        cutX = x;
+        cutY = y;
+        cutNX = nx;
+        cutNY = ny;
+        cutAge = 0f;
+        // what was in the falling piece goes with it
+        for (int i = 0; i < MAX_PAIRS; i++)
+            if (pon[i] && (px[i] - x) * nx + (py[i] - y) * ny > 0f) pon[i] = false;
+        for (int j = 0; j < MAX_FLYERS; j++)
+            if (fon[j] && (fx[j] - x) * nx + (fy[j] - y) * ny > 0f) fon[j] = false;
+        ringOn = false;
+        for (int i = 0; i < crystal.hoppers.size(); i++) {
+            Crystal.Hopper h = crystal.hoppers.get(i);
+            if (h.lost || h == crystal.active) continue;
+            float[] c = project(h.cx(), h.cy(), h.cz());
+            if (c != null && (c[0] - x) * nx + (c[1] * aspect - y) * ny > 0f) crystal.cutAway(i);
         }
+        listener.reset();
+        event(EV_CUT);
+    }
+
+    /** RGB of the current surface, for drops and reflections. */
+    float[] tint() {
+        return TINT[layer];
+    }
+
+    /** How far into the current cut, 0 to 1; 0 with none. */
+    float cutLevel() {
+        return cutAge < 0f ? 0f : Math.min(1f, cutAge / CUT_TIME);
     }
 
     private void addPath(float x, float y) {
@@ -437,7 +532,7 @@ final class World {
 
     /** A touch on a string plucks it; it sounds lower the longer it is. */
     private boolean pluckAt(float u, float v) {
-        if (crystal == null) return false;
+        if (crystal == null || !stringsShown()) return false;
         float[] a = new float[3], b = new float[3];
         int best = -1;
         float bestD = 0.045f, bestLen = 1f;
@@ -463,6 +558,11 @@ final class World {
         strings[best] = Math.max(strings[best], 0.14f);
         pluckPitch = Math.max(110f, Math.min(880f, 330f * 1.6f / Math.max(0.2f, bestLen)));
         event(EV_PLUCK);
+        // surfaces that listen to strings hear which string, if it was plucked on the breath
+        if (listensToStrings(layer) && Math.abs(fromBeat()) <= WINDOW) {
+            int n = listener.hear(best % Listener.SYMBOLS, time);
+            if (n > 0) heard(n);
+        }
         return true;
     }
 
@@ -473,7 +573,7 @@ final class World {
         float bestW = 1e9f;
         for (int i = 0; i < crystal.hoppers.size(); i++) {
             Crystal.Hopper h = crystal.hoppers.get(i);
-            if (h == crystal.active || h.under || h.sink > 0f) continue;
+            if (h == crystal.active || h.under || h.sink > 0f || h.lost) continue;
             float[] c = project(h.cx(), h.cy(), h.cz());
             float[] e = project(h.cx() + h.size, h.cy(), h.cz());
             if (c == null || e == null) continue;
@@ -543,8 +643,10 @@ final class World {
             beatStreak = 0;
             maybeVision(STAR, 0.7f);
         }
-        int n = listener.hear(Listener.symbol(quarter, onBeat), time);
-        if (n > 0) heard(n);
+        if (!listensToStrings(layer)) {
+            int n = listener.hear(Listener.symbol(quarter, onBeat), time);
+            if (n > 0) heard(n);
+        }
     }
 
     /**
@@ -558,17 +660,19 @@ final class World {
         float worth = 0.1f * fused / (1f + 0.6f * weary);
         weary += 1f;
         entropy = Math.max(0f, entropy - worth);
+        layersHeard |= 1 << layer;
         event(EV_PATTERN);
         if (fused > 0) {
             liquid.calm(0.35f);
             flash = 1f;
-            maybeVision(WARP, 1f);
+            maybeVision(listensToStrings(layer) ? EDGE_GALAXY : WARP, 1f);
         }
     }
 
     /** The drop is gone. Nothing is left, not even the count of cycles. */
     private void peace() {
         dropLeft = false;
+        layer = 0;
         generation = 0;
         resonance = 0f;
         entropy = 0.1f;
@@ -579,10 +683,20 @@ final class World {
 
     /** Whether the cycle is over: a white crust on still water, or a cluster with every pit full. */
     private boolean collapseDue() {
-        int q = crystal.qubits, white = 0;
-        for (int i = 0; i < q; i++) if (crystal.hues[i] > 1.5f) white++;
-        boolean order = q >= 10 && white >= q * 0.75f && entropy < 0.1f;
-        boolean full = crystal.active == null && crystal.settledCount() >= 20 && q >= crystal.settledCount();
+        // a cycle cannot end until the world has heard you on two different surfaces
+        if (Integer.bitCount(layersHeard) < 2) return false;
+        int real = 0, white = 0, standing = 0;
+        for (int i = 0; i < crystal.qubits; i++) {
+            if (!crystal.realQubit(i)) continue;
+            real++;
+            if (crystal.hues[i] > 1.5f) white++;
+        }
+        for (int i = 0; i < crystal.hoppers.size(); i++) {
+            Crystal.Hopper h = crystal.hoppers.get(i);
+            if (!h.lost && h != crystal.active) standing++;
+        }
+        boolean order = real >= 10 && white >= real * 0.75f && entropy < 0.1f;
+        boolean full = crystal.active == null && standing >= 12 && real >= standing;
         return order || full;
     }
 
@@ -700,6 +814,18 @@ final class World {
             return;
         }
 
+        if (cutAge >= 0f) {
+            // the world holds still while it is cut; then the next surface is there
+            cutAge += dt;
+            if (cutAge >= CUT_TIME) {
+                cutAge = -1f;
+                layer = (layer + 1) % LAYERS;
+                liquid.calm(0f);
+                boxAge = 1f;
+                event(EV_LAYER);
+            }
+            return;
+        }
         if (collapse >= 0f) {
             // falling in: the turn quickens, the surface is drawn towards the middle
             collapse += dt;
@@ -825,7 +951,7 @@ final class World {
         for (int i = 0; i < crystal.hoppers.size(); i++) {
             Crystal.Hopper h = crystal.hoppers.get(i);
             float g = Crystal.ease(h.grown);
-            if (g <= 0f) continue;
+            if (g <= 0f || h.lost) continue;
             float r = h.size * g;
             for (int c = 0; c < 8; c++) {
                 float wx = h.cx() + ((c & 1) == 0 ? -r : r);
