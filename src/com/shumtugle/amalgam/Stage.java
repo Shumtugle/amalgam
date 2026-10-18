@@ -310,11 +310,13 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             settledVersion = c.settledVersion;
             settledVerts = c.buildSettled(meshScratch);
             upload(settledBuf, settledVerts, GLES30.GL_STATIC_DRAW);
-            threadVerts = c.buildThreads(meshScratch);
-            if (threadVerts > 0) upload(threadBuf, threadVerts, GLES30.GL_STATIC_DRAW);
+
         }
         int activeVerts = c.buildMoving(meshScratch);
         if (activeVerts > 0) upload(activeBuf, activeVerts, GLES30.GL_DYNAMIC_DRAW);
+        // strings vibrate, so they are rebuilt every frame
+        threadVerts = c.buildThreads(meshScratch, world.time, world.strings);
+        if (threadVerts > 0) upload(threadBuf, threadVerts, GLES30.GL_DYNAMIC_DRAW);
 
         world.camera(mvp, model, eye, shift);
         GLES30.glEnable(GLES30.GL_DEPTH_TEST);

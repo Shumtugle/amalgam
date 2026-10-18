@@ -29,7 +29,15 @@ final class World {
 
     static final int EV_PLANT = 1, EV_OBSERVE = 2, EV_OBSERVE_ON_BEAT = 3, EV_MISS = 4,
             EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9,
-            EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15;
+            EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15,
+            EV_PLUCK = 16;
+
+    /** How far each string swings, as a share of its length, keyed by the lower qubit of its pair. */
+    final float[] strings = new float[Crystal.MAX_HOPPERS];
+    /** A string at rest still trembles this much. */
+    private static final float STRING_REST = 0.012f;
+    /** Pitch of the string plucked last, for the sound. */
+    float pluckPitch;
 
     /**
      * A circle drawn on the liquid holds for a while. A pair born inside it is observed by the
@@ -213,7 +221,7 @@ final class World {
             }
         }
         if (best >= 0) observe(best, side);
-        else if (!sinkAt(u, v)) miss(x, y);
+        else if (!pluckAt(u, v) && !sinkAt(u, v)) miss(x, y);
     }
 
     /** A finger slid across the glass: ripples, and a long stroke may open a vision. */
@@ -285,6 +293,37 @@ final class World {
         return false;
     }
 
+    /** A touch on a string plucks it; it sounds lower the longer it is. */
+    private boolean pluckAt(float u, float v) {
+        if (crystal == null) return false;
+        float[] a = new float[3], b = new float[3];
+        int best = -1;
+        float bestD = 0.045f, bestLen = 1f;
+        for (int i = 0; i < crystal.qubits; i++) {
+            if (!crystal.stringShown(i)) continue;
+            crystal.stringEnds(i, a, b);
+            float[] pa = project(a[0], a[1], a[2]), pb = project(b[0], b[1], b[2]);
+            if (pa == null || pb == null) continue;
+            // distance from the finger to the string on screen, in width units
+            float ax = pa[0], ay = pa[1] * aspect, bx = pb[0], by = pb[1] * aspect, px = u, py = v * aspect;
+            float ex = bx - ax, ey = by - ay, l2 = ex * ex + ey * ey + 1e-6f;
+            float t = Math.max(0f, Math.min(1f, ((px - ax) * ex + (py - ay) * ey) / l2));
+            float qx = ax + ex * t - px, qy = ay + ey * t - py;
+            float d = (float) Math.sqrt(qx * qx + qy * qy);
+            if (d < bestD && t > 0.08f && t < 0.92f) {
+                bestD = d;
+                best = i;
+                float lx = b[0] - a[0], ly = b[1] - a[1], lz = b[2] - a[2];
+                bestLen = (float) Math.sqrt(lx * lx + ly * ly + lz * lz);
+            }
+        }
+        if (best < 0) return false;
+        strings[best] = Math.max(strings[best], 0.14f);
+        pluckPitch = Math.max(110f, Math.min(880f, 330f * 1.6f / Math.max(0.2f, bestLen)));
+        event(EV_PLUCK);
+        return true;
+    }
+
     /** A touch on a hopper sends it under the black surface. */
     private boolean sinkAt(float u, float v) {
         if (crystal == null) return false;
@@ -312,7 +351,7 @@ final class World {
     }
 
     /** Screen position of a point of the cluster: u, v and the depth term w; null if behind. */
-    private float[] project(float x, float y, float z) {
+    float[] project(float x, float y, float z) {
         float cx = cMvp[0] * x + cMvp[4] * y + cMvp[8] * z + cMvp[12];
         float cy = cMvp[1] * x + cMvp[5] * y + cMvp[9] * z + cMvp[13];
         float cw = cMvp[3] * x + cMvp[7] * y + cMvp[11] * z + cMvp[15];
@@ -443,9 +482,13 @@ final class World {
             lastBeat = beat;
             liquid.press(crystalU(), crystalV(), 5f, 0.3f);
             event(EV_BREATH);
+            for (int i = 0; i < strings.length; i++) strings[i] += 0.025f;
             int n = entropy > 0.55f ? 2 : 1;
             for (int i = 0; i < n; i++) birth(true);
         }
+
+        float fade = (float) Math.exp(-dt * 0.8f);
+        for (int i = 0; i < strings.length; i++) strings[i] = Math.max(STRING_REST, strings[i] * fade);
 
         entropy = Math.min(1f, entropy + ENTROPY_DRIFT * dt);
         if (entropy >= 0.95f && !chaosSeen) {
@@ -685,7 +728,11 @@ final class World {
                         } else {
                             q = freeQubit(fpair[j]);
                         }
-                        if (q >= 0 && joinPair(fpair[j], q)) event(EV_ENTANGLE);
+                        if (q >= 0 && joinPair(fpair[j], q)) {
+                            int low = Math.min(q, crystal.partner[q]);
+                            if (low >= 0) strings[low] = 0.18f;
+                            event(EV_ENTANGLE);
+                        }
                         else event(q >= 0 ? EV_QUBIT : EV_ABSORB);
                     } else if (crystal.seat()) {
                         entropy = Math.min(1f, entropy + ENTROPY_QUBIT);

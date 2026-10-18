@@ -82,20 +82,36 @@ final class Sound implements Runnable {
         }
     }
 
+    // A plucked string: whole-number harmonics, the higher ones dying first.
+    private static final float[] STRING_RATIO = {1f, 2f, 3f, 4f, 5f, 6f};
+    private static final float[] STRING_LEVEL = {1f, 0.55f, 0.35f, 0.22f, 0.14f, 0.08f};
+    private static final float[] STRING_DECAY = {3.2f, 2.2f, 1.5f, 1.0f, 0.7f, 0.5f};
+
+    /** Plucks a string. */
+    void pluck(float freq, float level) {
+        synchronized (lock) {
+            voice(freq, level, 1f, STRING_RATIO, STRING_LEVEL, STRING_DECAY);
+        }
+    }
+
     private void strikeNow(float freq, float level, float ring) {
+        voice(freq, level, ring, RATIO, LEVEL, DECAY);
+    }
+
+    private void voice(float freq, float level, float ring, float[] ratio, float[] lev, float[] decay) {
         int v = nextVoice;
         nextVoice = (nextVoice + 1) % VOICES;
         for (int p = 0; p < PARTIALS; p++) {
-            int k = p % RATIO.length;
-            boolean twin = p >= RATIO.length;
-            float f = freq * RATIO[k] * (twin ? 1.0027f : 1f);
+            int k = p % ratio.length;
+            boolean twin = p >= ratio.length;
+            float f = freq * ratio[k] * (twin ? 1.0027f : 1f);
             double th = 2.0 * Math.PI * f / RATE;
             re[v][p] = 1f;
             im[v][p] = 0f;
             cr[v][p] = (float) Math.cos(th);
             ci[v][p] = (float) Math.sin(th);
-            amp[v][p] = f > 6000f ? 0f : LEVEL[k] * level * (twin ? 0.45f : 1f);
-            mul[v][p] = (float) Math.exp(-1.0 / (DECAY[k] * ring * RATE));
+            amp[v][p] = f > 6000f ? 0f : lev[k] * level * (twin ? 0.45f : 1f);
+            mul[v][p] = (float) Math.exp(-1.0 / (decay[k] * ring * RATE));
         }
         attack[v] = 0f;
         on[v] = true;

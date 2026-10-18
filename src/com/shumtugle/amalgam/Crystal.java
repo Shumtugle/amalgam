@@ -293,25 +293,39 @@ final class Crystal {
      * The lines of light between entangled qubits. They are drawn over everything, through
      * the crystal, because what links them is not inside the metal.
      */
-    int buildThreads(float[] out) {
+    int buildThreads(float[] out, float time, float[] amp) {
         int v = 0;
         for (int i = 0; i < qubits; i++) {
-            int j = partner[i];
-            if (j <= i || hoppers.get(i).sink > 0f || hoppers.get(j).sink > 0f) continue;
-            v = thread(out, v, hoppers.get(i), hoppers.get(j));
+            if (!stringShown(i)) continue;
+            v = string(out, v, hoppers.get(i), hoppers.get(partner[i]), amp[i], time, i);
         }
         return v;
     }
 
-    /** Where a settled hopper's qubit sits, written into p. */
-    private static void qubitAt(Hopper h, float[] p) {
-        float s = h.size, base = s * 0.18f, t = s / h.rings, step = t * 0.75f;
-        float y = base + step * (1f + h.jitter[h.rings - 1]) + t * 0.55f;
-        for (int k = 0; k < 3; k++) p[k] = h.f[9 + k] + h.f[3 + k] * y;
+    /** Whether qubit i owns a visible string: it has a partner after it and neither is under. */
+    boolean stringShown(int i) {
+        int j = i < qubits ? partner[i] : -1;
+        return j > i && hoppers.get(i).sink <= 0f && hoppers.get(j).sink <= 0f;
     }
 
-    /** A thin line of light between two entangled qubits. */
-    private int thread(float[] out, int v, Hopper a, Hopper b) {
+    /** Both ends of the string owned by qubit i, in cluster space. */
+    void stringEnds(int i, float[] a, float[] b) {
+        qubitAt(hoppers.get(i), a);
+        qubitAt(hoppers.get(partner[i]), b);
+    }
+
+    /** How fast a string of this length is drawn to swing, per second: short strings are quicker. */
+    static float swing(float len) {
+        return Math.max(2.5f, Math.min(9f, 7f / Math.max(0.1f, len)));
+    }
+
+    static final int STRING_SEGMENTS = 18;
+
+    /**
+     * A string between two entangled qubits, vibrating as a standing wave: fixed at the qubits,
+     * widest in the middle, with a little of the second harmonic and a slight sideways sway.
+     */
+    private int string(float[] out, int v, Hopper a, Hopper b, float amp, float time, int seed) {
         float[] pa = new float[3], pb = new float[3];
         qubitAt(a, pa);
         qubitAt(b, pb);
@@ -319,15 +333,48 @@ final class Crystal {
         float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (len < 1e-3f) return v;
         dx /= len; dy /= len; dz /= len;
-        // any axis not along the line, crossed twice, gives the other two edges of the frame
         float ox = Math.abs(dy) < 0.9f ? 0f : 1f, oy = Math.abs(dy) < 0.9f ? 1f : 0f;
-        float ux = dy * 0f - dz * oy, uy = dz * ox - dx * 0f, uz = dx * oy - dy * ox;
+        float ux = -dz * oy, uy = dz * ox, uz = dx * oy - dy * ox;
         float ul = (float) Math.sqrt(ux * ux + uy * uy + uz * uz);
         ux /= ul; uy /= ul; uz /= ul;
         float wx = dy * uz - dz * uy, wy = dz * ux - dx * uz, wz = dx * uy - dy * ux;
-        float[] f = {dx, dy, dz, ux, uy, uz, wx, wy, wz,
-                (pa[0] + pb[0]) * 0.5f, (pa[1] + pb[1]) * 0.5f, (pa[2] + pb[2]) * 0.5f};
-        return box(out, v, f, 0, 0, 0, len * 0.5f, 0.008f, 0.008f, 0f, THREAD);
+        float w = (float) (2.0 * Math.PI * swing(len)), phase = seed * 1.7f;
+        float c1 = (float) Math.sin(w * time + phase), c2 = (float) Math.sin(2f * w * time + phase * 1.3f);
+        float c3 = (float) Math.cos(w * 1.01f * time + phase);
+        float[] p0 = new float[3], p1 = new float[3];
+        for (int k = 0; k <= STRING_SEGMENTS; k++) {
+            float t = k / (float) STRING_SEGMENTS;
+            float s1 = (float) Math.sin(Math.PI * t), s2 = (float) Math.sin(2.0 * Math.PI * t);
+            float du = amp * (s1 * c1 + 0.35f * s2 * c2) * len, dw = amp * 0.4f * s1 * c3 * len;
+            p1[0] = pa[0] + dx * len * t + ux * du + wx * dw;
+            p1[1] = pa[1] + dy * len * t + uy * du + wy * dw;
+            p1[2] = pa[2] + dz * len * t + uz * du + wz * dw;
+            if (k > 0) v = segment(out, v, p0, p1, ux, uy, uz);
+            p0[0] = p1[0]; p0[1] = p1[1]; p0[2] = p1[2];
+        }
+        return v;
+    }
+
+    /** One straight piece of a string, a thin box from p0 to p1. */
+    private int segment(float[] out, int v, float[] p0, float[] p1, float ux, float uy, float uz) {
+        float ex = p1[0] - p0[0], ey = p1[1] - p0[1], ez = p1[2] - p0[2];
+        float el = (float) Math.sqrt(ex * ex + ey * ey + ez * ez);
+        if (el < 1e-5f) return v;
+        ex /= el; ey /= el; ez /= el;
+        float wx = ey * uz - ez * uy, wy = ez * ux - ex * uz, wz = ex * uy - ey * ux;
+        float wl = (float) Math.sqrt(wx * wx + wy * wy + wz * wz) + 1e-6f;
+        wx /= wl; wy /= wl; wz /= wl;
+        float vx = wy * ez - wz * ey, vy = wz * ex - wx * ez, vz = wx * ey - wy * ex;
+        float[] f = {ex, ey, ez, vx, vy, vz, wx, wy, wz,
+                (p0[0] + p1[0]) * 0.5f, (p0[1] + p1[1]) * 0.5f, (p0[2] + p1[2]) * 0.5f};
+        return box(out, v, f, 0, 0, 0, el * 0.5f + 0.003f, 0.008f, 0.008f, 0f, THREAD);
+    }
+
+    /** Where a settled hopper's qubit sits, written into p. */
+    static void qubitAt(Hopper h, float[] p) {
+        float s = h.size, base = s * 0.18f, t = s / h.rings, step = t * 0.75f;
+        float y = base + step * (1f + h.jitter[h.rings - 1]) + t * 0.55f;
+        for (int k = 0; k < 3; k++) p[k] = h.f[9 + k] + h.f[3 + k] * y;
     }
 
     /** Writes what moves every frame: the growing hopper and those going under or coming up. */

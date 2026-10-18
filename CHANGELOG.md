@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7 — 2026-10-18
+
+Strings.
+
+- The lines between entangled qubits are strings now: they tremble as a standing wave, still at the qubits and widest in the middle.
+- Touch a string to pluck it. It swings wide, settles, and sounds as a plucked string: a long one low, a short one high.
+- Every breath of the crystal stirs the strings a little; a new entangled pair sets its string ringing.
+
 ## 0.6.1 — 2026-10-18
 
 - Fixed: 0.6 stopped at start (one buffer more than its array had room for).

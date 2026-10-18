@@ -202,6 +202,10 @@ public final class MainActivity extends Activity {
                 sound.strike(LOW * 2f, 0.3f, 1.6f);
                 thump(false);
                 break;
+            case World.EV_PLUCK:
+                sound.pluck(w.pluckPitch, 0.5f);
+                tick();
+                break;
             case World.EV_BREATH:
                 // the breath must be heard, or nobody can look on it
                 sound.strike(LOW, 0.16f, 0.6f);
