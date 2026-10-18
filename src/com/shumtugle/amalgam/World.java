@@ -28,7 +28,21 @@ final class World {
     static final float GROWTH_RATE = 1.1f;
 
     static final int EV_PLANT = 1, EV_OBSERVE = 2, EV_OBSERVE_ON_BEAT = 3, EV_MISS = 4,
-            EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9;
+            EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9,
+            EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12;
+
+    // Visions of deep space that open through the liquid, each tied to an event.
+    static final int WARP = 0, BLUE_GALAXY = 1, SUPERNOVA = 2, LAVA = 3, NEBULA = 4, STAR = 5, EDGE_GALAXY = 6;
+    static final int VISIONS = 7;
+    /** Seconds a vision lasts, and the quiet after one before another may open. */
+    static final float VISION_LIFE = 7.5f, VISION_REST = 40f;
+    /** The open vision, or -1. */
+    int vision = -1;
+    float visionAge;
+    private float visionRest = 20f, visionIdle;
+    private int missStreak, beatStreak;
+    private float stroke;
+    private boolean strokeSpent, chaosSeen;
 
     /**
      * Disorder in [0, 1]. It creeps up with time and with every qubit and hopper. High, it means
@@ -148,6 +162,8 @@ final class World {
 
     /** A finger came down at (u, v). */
     void touch(float u, float v) {
+        stroke = 0f;
+        strokeSpent = false;
         liquid.press(u, v, 2.6f, 1.1f);
         if (crystal == null) {
             plant(u, v);
@@ -173,12 +189,69 @@ final class World {
             }
         }
         if (best >= 0) observe(best, side);
-        else miss(x, y);
+        else if (!sinkAt(u, v)) miss(x, y);
     }
 
-    /** A finger slid across the glass: ripples, nothing else. */
+    /** A finger slid across the glass: ripples, and a long stroke may open a vision. */
     void drag(float u, float v) {
         liquid.press(u, v, 2.2f, 0.35f);
+        stroke += 0.02f;
+        if (stroke > 0.7f && !strokeSpent && crystal != null) {
+            strokeSpent = true;
+            maybeVision(EDGE_GALAXY, 0.6f);
+        }
+    }
+
+    /** A touch on a hopper sends it under the black surface. */
+    private boolean sinkAt(float u, float v) {
+        if (crystal == null) return false;
+        int best = -1;
+        float bestW = 1e9f;
+        for (int i = 0; i < crystal.hoppers.size(); i++) {
+            Crystal.Hopper h = crystal.hoppers.get(i);
+            if (h == crystal.active || h.under || h.sink > 0f) continue;
+            float[] c = project(h.cx(), h.cy(), h.cz());
+            float[] e = project(h.cx() + h.size, h.cy(), h.cz());
+            if (c == null || e == null) continue;
+            float reach = Math.max(0.05f, Math.abs(e[0] - c[0]) * 1.1f);
+            float dx = c[0] - u, dy = (c[1] - v) * aspect;
+            // of the hoppers under the finger, the nearest to the eye
+            if (dx * dx + dy * dy < reach * reach && c[2] < bestW) {
+                bestW = c[2];
+                best = i;
+            }
+        }
+        if (best < 0 || !crystal.submerge(best, spin)) return false;
+        liquid.press(u, v, 3.5f, 1.4f);
+        event(EV_SINK);
+        maybeVision(LAVA, 0.5f);
+        return true;
+    }
+
+    /** Screen position of a point of the cluster: u, v and the depth term w; null if behind. */
+    private float[] project(float x, float y, float z) {
+        float cx = cMvp[0] * x + cMvp[4] * y + cMvp[8] * z + cMvp[12];
+        float cy = cMvp[1] * x + cMvp[5] * y + cMvp[9] * z + cMvp[13];
+        float cw = cMvp[3] * x + cMvp[7] * y + cMvp[11] * z + cMvp[15];
+        if (cw <= 1e-4f) return null;
+        return new float[] {(cx / cw + cShift[0]) * 0.5f + 0.5f, (cy / cw + cShift[1]) * 0.5f + 0.5f, cw};
+    }
+
+    /** Opens a vision with the given chance, unless one is open or the last was too recent. */
+    private void maybeVision(int which, float chance) {
+        if (vision >= 0 || visionRest > 0f || rnd.nextFloat() >= chance) return;
+        vision = which;
+        visionAge = 0f;
+        visionIdle = 0f;
+        event(EV_VISTA);
+    }
+
+    /** How strongly the open vision shows: it swells in and fades out. */
+    float visionAlpha() {
+        if (vision < 0) return 0f;
+        float in = Math.min(1f, visionAge / 1.4f), out = Math.min(1f, (VISION_LIFE - visionAge) / 2.2f);
+        float a = Math.max(0f, Math.min(in, out));
+        return a * a * (3f - 2f * a);
     }
 
     /** Looking at a pair makes it real: one drop falls in, the other escapes. */
@@ -200,6 +273,12 @@ final class World {
         resonance += ESCAPE_RESONANCE * k;
         if (onBeat) flash = Math.max(flash, 0.8f);
         event(onBeat ? EV_OBSERVE_ON_BEAT : EV_OBSERVE);
+        missStreak = 0;
+        beatStreak = onBeat ? beatStreak + 1 : 0;
+        if (beatStreak >= 4) {
+            beatStreak = 0;
+            maybeVision(STAR, 0.7f);
+        }
         int n = listener.hear(Listener.symbol(quarter, onBeat), time);
         if (n > 0) heard(n);
     }
@@ -214,6 +293,7 @@ final class World {
         liquid.calm(0.35f);
         flash = 1f;
         event(EV_PATTERN);
+        maybeVision(WARP, 1f);
     }
 
     /** Looking at empty liquid finds nothing and unsettles what was nearby. */
@@ -225,6 +305,11 @@ final class World {
                 plife[i] = Math.min(plife[i], page[i] + 0.25f);
         }
         event(EV_MISS);
+        beatStreak = 0;
+        if (++missStreak >= 3) {
+            missStreak = 0;
+            maybeVision(NEBULA, 0.6f);
+        }
     }
 
     private void launch(float x, float y, int kind, float value, float film) {
@@ -279,6 +364,37 @@ final class World {
         }
 
         entropy = Math.min(1f, entropy + ENTROPY_DRIFT * dt);
+        if (entropy >= 0.95f && !chaosSeen) {
+            chaosSeen = true;
+            maybeVision(SUPERNOVA, 1f);
+        } else if (entropy < 0.8f) {
+            chaosSeen = false;
+        }
+
+        if (vision >= 0) {
+            visionAge += dt;
+            if (visionAge >= VISION_LIFE) {
+                vision = -1;
+                visionRest = VISION_REST;
+            }
+        } else {
+            visionRest = Math.max(0f, visionRest - dt);
+            // now and then a vision opens for no reason at all
+            visionIdle += dt;
+            if (visionIdle > 120f) {
+                visionIdle = 0f;
+                maybeVision(rnd.nextInt(VISIONS), 0.35f);
+            }
+        }
+
+        int rose = crystal.updateSinking(dt, spin);
+        if (rose >= 0) {
+            Crystal.Hopper h = crystal.hoppers.get(rose);
+            float[] c = project(h.cx(), h.cy(), h.cz());
+            if (c != null) liquid.press(c[0], c[1], 4f, -1.0f);
+            event(EV_SURFACE);
+            maybeVision(BLUE_GALAXY, 0.5f);
+        }
         // disorder makes the surface tremble by itself
         noise += dt * 4f * entropy;
         while (noise >= 1f) {

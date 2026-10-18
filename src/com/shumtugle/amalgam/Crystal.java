@@ -28,6 +28,12 @@ final class Crystal {
         float film;
         int rings;
         final float[] jitter = new float[MAX_RINGS];
+        /** How far it has gone under the black surface, 0 to 1. */
+        float sink;
+        /** Whether it is meant to be under; set by a touch, cleared after half a turn. */
+        boolean under;
+        /** The cluster's turn when it went under; it comes back up half a turn later. */
+        float underSpin;
 
         float top() {
             return size * (0.18f + 0.75f);
@@ -250,14 +256,62 @@ final class Crystal {
         return 1f - a * a * a;
     }
 
-    /** Writes every finished hopper; returns the vertex count. */
+    /** Writes every finished hopper that rests above the surface; returns the vertex count. */
     int buildSettled(float[] out) {
         int v = 0;
         for (int i = 0; i < hoppers.size(); i++) {
             Hopper h = hoppers.get(i);
-            if (h != active) v = emitHopper(h, i, out, v);
+            if (h != active && h.sink <= 0f) v = emitHopper(h, i, out, v);
         }
         return v;
+    }
+
+    /** Writes what moves every frame: the growing hopper and those going under or coming up. */
+    int buildMoving(float[] out) {
+        int v = 0;
+        for (int i = 0; i < hoppers.size(); i++) {
+            Hopper h = hoppers.get(i);
+            if (h == active || h.sink > 0f) v = emitHopper(h, i, out, v);
+        }
+        return v;
+    }
+
+    /** Most hoppers allowed under at once, so the cluster never empties. */
+    static final int MAX_UNDER = 6;
+
+    /** Sends a finished hopper under the surface. Returns false if it cannot go. */
+    boolean submerge(int i, float spin) {
+        Hopper h = hoppers.get(i);
+        if (h == active || h.under || h.sink > 0f) return false;
+        int under = 0;
+        for (int k = 0; k < hoppers.size(); k++) if (hoppers.get(k).under) under++;
+        if (under >= MAX_UNDER) return false;
+        h.under = true;
+        h.underSpin = spin;
+        settledVersion++;
+        return true;
+    }
+
+    /**
+     * Moves hoppers under and back. Returns the index of a hopper that has just started to
+     * come back up after half a turn, or -1.
+     */
+    int updateSinking(float dt, float spin) {
+        int rose = -1;
+        for (int i = 0; i < hoppers.size(); i++) {
+            Hopper h = hoppers.get(i);
+            if (h.under && spin - h.underSpin >= (float) Math.PI) {
+                h.under = false;
+                rose = i;
+            }
+            if (h.under) {
+                h.sink = Math.min(1f, h.sink + dt / 1.2f);
+            } else if (h.sink > 0f) {
+                h.sink = Math.max(0f, h.sink - dt / 1.8f);
+                if (h.sink == 0f) settledVersion++;
+            }
+        }
+        return rose;
     }
 
     /** Writes every hopper, growing or not; returns the vertex count. */
@@ -274,7 +328,8 @@ final class Crystal {
 
     private int emitHopper(Hopper h, int index, float[] out, int v) {
         float g = ease(h.grown);
-        if (g <= 0.001f) return v;
+        if (g <= 0.001f || h.sink >= 0.999f) return v;
+        int first = v;
         float s = h.size * g;
         float base = s * 0.18f;
         float t = s / h.rings;
@@ -292,11 +347,20 @@ final class Crystal {
             v = box(out, v, h.f, a - w, hy, 0, w, hy, a - t, film, shade);
             v = box(out, v, h.f, -(a - w), hy, 0, w, hy, a - t, film, shade);
         }
-        if (index < qubits && h != active) {
+        if (index < qubits && h != active && h.sink < 0.25f) {
             // the qubit rests on the lowest ring, in the pit, peeking over the next wall
             float floor = base + step * (1f + h.jitter[h.rings - 1]);
             float q = t * 0.55f;
             v = box(out, v, h.f, 0, floor + q, 0, q, q, q, hues[index], QUBIT);
+        }
+        if (h.sink > 0f) {
+            // going under: down through the surface, darkening to the black of the liquid
+            float drop = h.sink * h.size * 2.4f, dim = (1f - h.sink) * (1f - h.sink);
+            for (int k = first; k < v; k++) {
+                int o = k * FLOATS;
+                out[o + 1] -= drop;
+                if (out[o + 7] < 2f) out[o + 7] *= dim;
+            }
         }
         return v;
     }

@@ -131,6 +131,34 @@ public final class MainActivity extends Activity {
                 thump(true);
                 break;
             }
+            case World.EV_SINK:
+                // a heavy body going down into something thick
+                sound.strike(LOW * 1.2f, 0.4f, 0.7f);
+                sound.strikeLater(LOW * 0.9f, 0.25f, 0.9f, 0.18f);
+                thump(true);
+                break;
+            case World.EV_SURFACE:
+                sound.strike(SCALE[0], 0.18f, 1.2f);
+                sound.strikeLater(SCALE[2], 0.16f, 1.2f, 0.25f);
+                tick();
+                break;
+            case World.EV_VISTA:
+                if (w.vision == World.WARP) {
+                    // the jump: a rush of rising bells
+                    for (int i = 0; i < 10; i++)
+                        sound.strikeLater(SCALE[i % SCALE.length] * (i >= SCALE.length ? 2f : 1f), 0.22f, 0.7f, i * 0.05f);
+                } else if (w.vision == World.SUPERNOVA) {
+                    sound.strike(LOW, 1f, 2.5f);
+                    sound.strike(LOW * 1.5f, 0.6f, 2.5f);
+                    thump(true);
+                } else {
+                    // a slow wide chord as the deep opens
+                    sound.strike(LOW, 0.35f, 3f);
+                    sound.strikeLater(LOW * 1.5f, 0.28f, 3f, 0.4f);
+                    sound.strikeLater(LOW * 2f, 0.24f, 3f, 0.8f);
+                    sound.strikeLater(LOW * 3f, 0.16f, 3f, 1.2f);
+                }
+                break;
             case World.EV_BREATH:
                 // the breath must be heard, or nobody can look on it
                 sound.strike(LOW, 0.16f, 0.6f);

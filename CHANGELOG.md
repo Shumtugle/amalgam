@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5 — 2026-10-18
+
+The deep.
+
+- A touch on a hopper sends it down into the black liquid, darkening as it goes, with its qubit. Half a turn of the cluster later it rises again.
+- Visions of deep space open through the liquid now and then, bent by its ripples, and fade after a few seconds: a jump to light speed, a half-lit planet before a blue galaxy, a supernova, a lava world, a nebula, a star with crossed rays, a galaxy seen edge-on.
+- Each vision belongs to an event and opens only by chance, with a quiet spell after each: a heard pattern, a hopper going under or coming back, disorder at its peak, three looks at nothing, four looks on the breath, a long stroke across the surface, or nothing at all.
+- Everything is computed; there are still no image files.
+
 ## 0.4 — 2026-10-17
 
 Escape from entropy.

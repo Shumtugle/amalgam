@@ -35,7 +35,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private int pendingCount;
     private final float[] lastX = new float[10], lastY = new float[10];
 
-    private int glass, crystal, drop;
+    private int glass, crystal, drop, vista;
     private int fieldTex, triBuf, settledBuf, activeBuf, quadBuf;
     private final float[] drops = new float[World.maxDrops() * 8];
     private int settledVerts, settledVersion = -1;
@@ -119,6 +119,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         glass = program("glass.vert", "glass.frag");
         crystal = program("crystal.vert", "crystal.frag");
         drop = program("drop.vert", "drop.frag");
+        vista = program("glass.vert", "vista.frag");
         int[] ids = new int[4];
         GLES30.glGenBuffers(4, ids, 0);
         triBuf = ids[0];
@@ -202,6 +203,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         act.onWorldFrame(world);
 
         drawGlass();
+        drawVision();
         drawDrops();
         drawCrystal();
 
@@ -246,6 +248,30 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3);
     }
 
+    /** A vision of deep space added over the liquid, bent by its ripples. */
+    private void drawVision() {
+        float a = world.visionAlpha();
+        if (world.vision < 0 || a <= 0f) return;
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+        GLES30.glEnable(GLES30.GL_BLEND);
+        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE);
+        GLES30.glUseProgram(vista);
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fieldTex);
+        GLES30.glUniform1i(loc(vista, "uField"), 0);
+        GLES30.glUniform1i(loc(vista, "uScene"), world.vision);
+        GLES30.glUniform1f(loc(vista, "uAlpha"), a);
+        GLES30.glUniform1f(loc(vista, "uTime"), world.visionAge);
+        GLES30.glUniform1f(loc(vista, "uAspect"), world.aspect);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, triBuf);
+        GLES30.glEnableVertexAttribArray(0);
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, 0);
+        GLES30.glDisableVertexAttribArray(1);
+        GLES30.glDisableVertexAttribArray(2);
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3);
+        GLES30.glDisable(GLES30.GL_BLEND);
+    }
+
     private void drawDrops() {
         int n = world.drops(drops);
         if (n == 0) return;
@@ -283,7 +309,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             settledVerts = c.buildSettled(meshScratch);
             upload(settledBuf, settledVerts, GLES30.GL_STATIC_DRAW);
         }
-        int activeVerts = c.buildActive(meshScratch);
+        int activeVerts = c.buildMoving(meshScratch);
         if (activeVerts > 0) upload(activeBuf, activeVerts, GLES30.GL_DYNAMIC_DRAW);
 
         world.camera(mvp, model, eye, shift);
