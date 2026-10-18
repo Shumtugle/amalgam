@@ -30,7 +30,22 @@ final class World {
     static final int EV_PLANT = 1, EV_OBSERVE = 2, EV_OBSERVE_ON_BEAT = 3, EV_MISS = 4,
             EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9,
             EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15,
-            EV_PLUCK = 16;
+            EV_PLUCK = 16, EV_COLLAPSE = 17, EV_SINGULARITY = 18;
+
+    /**
+     * The end of a cycle. When the crystal is nearly all white and the water still, or when every
+     * pit is full and the cluster can grow no more, it falls in on itself and leaves one drop.
+     * A touch on the drop begins the next cycle, with the spectrum shifted.
+     */
+    int generation;
+    /** Seconds since the collapse began, or -1. */
+    float collapse = -1f;
+    static final float COLLAPSE_TIME = 5.5f;
+    /** The drop a collapse leaves behind, waiting; space units. */
+    boolean dropLeft;
+    float dropX, dropY;
+    /** Weariness with patterns: every heard one adds to it, and it fades over minutes. */
+    private float weary;
 
     /** How far each string swings, as a share of its length, keyed by the lower qubit of its pair. */
     final float[] strings = new float[Crystal.MAX_HOPPERS];
@@ -164,7 +179,11 @@ final class World {
     }
 
     private void plant(float u, float v) {
-        crystal = new Crystal(seed);
+        crystal = new Crystal(seed + generation * 7919L);
+        dropLeft = false;
+        mid[0] = 0f; mid[1] = 0.5f; mid[2] = 0f;
+        across = 1.2f;
+        upward = 1.2f;
         seedU = u;
         seedV = v;
         beatStart = time + BEAT * 0.5f;
@@ -176,8 +195,9 @@ final class World {
      * Brings back a saved game. Away is how long the game was closed, in seconds;
      * the crystal grew a little by itself meanwhile.
      */
-    void restore(float u, float v, int settled, float grown, float[] hues, int[] partners, float savedEntropy,
+    void restore(int gen, float u, float v, int settled, float grown, float[] hues, int[] partners, float savedEntropy,
                  float savedPool, float savedResonance, float away) {
+        generation = gen;
         plant(u, v);
         crystal.restore(settled, grown, hues, partners);
         entropy = Math.max(0f, Math.min(1f, savedEntropy));
@@ -190,14 +210,39 @@ final class World {
         measureBox();
     }
 
+    /** A saved game between cycles: the drop of the last collapse waits in the middle. */
+    void between(int gen, float savedResonance) {
+        generation = gen;
+        resonance = savedResonance;
+        dropLeft = gen > 0;
+        dropX = 0.5f;
+        dropY = 0.52f * aspect;
+    }
+
+    /** Shift of every film thickness for this cycle, so each cycle has its own colours. */
+    float filmShift() {
+        return (generation * 97) % 360;
+    }
+
+    /** How far the collapse has gone, 0 to 1; 0 when there is none. */
+    float collapseLevel() {
+        return collapse < 0f ? 0f : Math.min(1f, collapse / COLLAPSE_TIME);
+    }
+
     /** A finger came down at (u, v). */
     void touch(float u, float v) {
+        if (collapse >= 0f) return;
         stroke = 0f;
         strokeSpent = false;
         pathN = 0;
         addPath(u, v * aspect);
         liquid.press(u, v, 2.6f, 1.1f);
         if (crystal == null) {
+            // after a collapse the new cycle grows from the drop that was left
+            if (dropLeft) {
+                u = dropX;
+                v = dropY / aspect;
+            }
             plant(u, v);
             pool += FALL_ENERGY;
             flash = 1f;
@@ -410,12 +455,52 @@ final class World {
      * for a longer pattern, and the surface stills.
      */
     private void heard(int n) {
-        crystal.fuse(n);
-        entropy = Math.max(0f, entropy - 0.1f * n);
-        liquid.calm(0.35f);
-        flash = 1f;
+        // order is paid for with material: only what is actually folded into white counts,
+        // and a world that has heard many patterns lately is harder to impress
+        int fused = crystal.fuse(n);
+        float worth = 0.1f * fused / (1f + 0.6f * weary);
+        weary += 1f;
+        entropy = Math.max(0f, entropy - worth);
         event(EV_PATTERN);
-        maybeVision(WARP, 1f);
+        if (fused > 0) {
+            liquid.calm(0.35f);
+            flash = 1f;
+            maybeVision(WARP, 1f);
+        }
+    }
+
+    /** Whether the cycle is over: a white crust on still water, or a cluster with every pit full. */
+    private boolean collapseDue() {
+        int q = crystal.qubits, white = 0;
+        for (int i = 0; i < q; i++) if (crystal.hues[i] > 1.5f) white++;
+        boolean order = q >= 10 && white >= q * 0.75f && entropy < 0.1f;
+        boolean full = crystal.active == null && crystal.settledCount() >= 20 && q >= crystal.settledCount();
+        return order || full;
+    }
+
+    private void beginCollapse() {
+        collapse = 0f;
+        for (int i = 0; i < MAX_PAIRS; i++) pon[i] = false;
+        for (int j = 0; j < MAX_FLYERS; j++) fon[j] = false;
+        ringOn = false;
+        event(EV_COLLAPSE);
+    }
+
+    private void endCollapse() {
+        dropX = crystalX();
+        dropY = crystalY();
+        dropLeft = true;
+        crystal = null;
+        collapse = -1f;
+        generation++;
+        entropy = 0.05f;
+        pool = 0f;
+        weary = 0f;
+        for (int i = 0; i < strings.length; i++) strings[i] = 0f;
+        liquid.calm(0.1f);
+        liquid.press(dropX, dropY / aspect, 6f, 2.2f);
+        flash = 1f;
+        event(EV_SINGULARITY);
     }
 
     /** Looking at empty liquid finds nothing and unsettles what was nearby. */
@@ -473,7 +558,24 @@ final class World {
     void update(float dt) {
         time += dt;
         flash = Math.max(0f, flash - dt * 1.8f);
+        weary *= (float) Math.exp(-dt / 150f);
         if (crystal == null) return;
+
+        if (collapse >= 0f) {
+            // falling in: the turn quickens, the surface is drawn towards the middle
+            collapse += dt;
+            float k = collapseLevel();
+            spin += dt * (0.11f + 3f * k * k);
+            pulse = k;
+            if (rnd.nextFloat() < dt * 6f)
+                liquid.press(crystalU(), crystalV(), 3f + 4f * (1f - k), -0.5f * k);
+            if (collapse >= COLLAPSE_TIME) endCollapse();
+            return;
+        }
+        if (collapseDue()) {
+            beginCollapse();
+            return;
+        }
 
         float d = fromBeat();
         pulse = (float) Math.exp(-(d * d) / 0.09f);
@@ -842,6 +944,13 @@ final class World {
      */
     int drops(float[] out) {
         int n = 0;
+        if (dropLeft && crystal == null) {
+            // the one drop a collapse leaves; it breathes slowly while it waits
+            float r = DROP * (1.4f + 0.12f * (float) Math.sin(time * 2.4f));
+            out[0] = dropX; out[1] = dropY / aspect; out[2] = r; out[3] = 1f;
+            out[4] = 200f + filmShift(); out[5] = 1f; out[6] = 0f; out[7] = 1f;
+            n = 1;
+        }
         for (int i = 0; i < MAX_PAIRS; i++) {
             if (!pon[i]) continue;
             float r = pairSize(i), g = gap(i);
@@ -851,7 +960,7 @@ final class World {
                 out[o + 1] = (py[i] + pay[i] * g * s) / aspect;
                 out[o + 2] = r;
                 out[o + 3] = 1f;
-                out[o + 4] = pfilm[i];
+                out[o + 4] = pfilm[i] + filmShift();
                 out[o + 5] = 1f;
                 out[o + 6] = 0f;
                 out[o + 7] = 1f;
@@ -875,7 +984,7 @@ final class World {
             out[o + 1] = fy[j] / aspect;
             out[o + 2] = r;
             out[o + 3] = fkind[j] == ESCAPING ? Math.max(0f, 1f - fage[j] * 0.6f) : 1f;
-            out[o + 4] = ffilm[j];
+            out[o + 4] = ffilm[j] + filmShift();
             out[o + 5] = fvx[j] / sp;
             out[o + 6] = fvy[j] / sp;
             out[o + 7] = stretch;
@@ -915,6 +1024,10 @@ final class World {
 
     /** Strength of the bending of the liquid round the crystal. */
     float lens() {
+        if (collapse >= 0f) {
+            float k = collapseLevel();
+            return Math.min(0.06f, 0.0011f * mass() + 0.05f * k * k);
+        }
         return Math.min(0.012f, 0.0011f * mass());
     }
 
@@ -960,7 +1073,9 @@ final class World {
         float[] proj = new float[16], view = new float[16], pv = new float[16];
         Mat.perspective(proj, fovy, 1f / aspect, Math.max(0.05f, dist - radius * 3f), dist + radius * 3f);
         Mat.lookAt(view, eye[0], eye[1], eye[2], mid[0], mid[1], mid[2]);
-        Mat.spinAround(model, spin, mid[0], mid[1], mid[2]);
+        // in a collapse the cluster shrinks to a point about its middle
+        float k = collapseLevel(), shrink = 1f - k * k * (3f - 2f * k) * 0.985f;
+        Mat.spinScaleAround(model, spin, shrink, mid[0], mid[1], mid[2]);
         Mat.mul(pv, proj, view);
         Mat.mul(mvp, pv, model);
         shift[0] = crystalU() * 2f - 1f;

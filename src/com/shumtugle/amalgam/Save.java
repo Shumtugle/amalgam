@@ -16,7 +16,7 @@ final class Save {
         float u, v, grown, pool, resonance, entropy;
         float[] hues = new float[0];
         int[] partners = new int[0];
-        int settled;
+        int settled, generation;
         /** Seconds since the game was saved. */
         float away;
     }
@@ -31,6 +31,7 @@ final class Save {
         State s = new State();
         s.seed = p.getLong("seed", 0L);
         s.planted = p.getBoolean("planted", false);
+        s.generation = p.getInt("generation", 0);
         s.u = p.getFloat("u", 0.5f);
         s.v = p.getFloat("v", 0.5f);
         s.settled = p.getInt("settled", 0);
@@ -64,8 +65,12 @@ final class Save {
         if (w == null) return;
         SharedPreferences.Editor e = prefs(c).edit();
         e.putLong("seed", w.seed);
-        e.putBoolean("planted", w.planted());
-        if (w.planted()) {
+        // a collapse under way is saved as finished: the next start finds the drop waiting
+        boolean falling = w.collapse >= 0f;
+        e.putInt("generation", w.generation + (falling ? 1 : 0));
+        e.putFloat("resonance", w.resonance);
+        e.putBoolean("planted", w.planted() && !falling);
+        if (w.planted() && !falling) {
             Crystal k = w.crystal;
             e.putFloat("u", w.seedU);
             e.putFloat("v", w.seedV);

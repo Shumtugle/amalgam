@@ -8,7 +8,9 @@ The liquid is a vacuum. Where its waves pile up, pairs of quicksilver drops rise
 
 A hopper grows as a frame round nothing: every finished one opens an empty pit. A drop that falls in settles into the next empty pit as a qubit, a small cube of light. Qubits take their colour from the spectrum in the order they arrive, so the cluster reads as a rainbow of its own history.
 
-Everything drifts towards disorder: more pairs, a trembling surface, a string out of tune. The way back is a pattern. The world listens to the order in which you look, which side of the crystal and whether on the breath; when a short run repeats, it sings it back, folds the newest qubits into one white one and grows quiet again. It does not reward the same pattern twice in a row for long, so the search never ends.
+Everything drifts towards disorder: more pairs, a trembling surface, a string out of tune. The way back is a pattern. The world listens to the order in which you look, which side of the crystal and whether on the breath; when a short run repeats, it sings it back, folds the newest qubits into one white one and grows quiet again. It does not reward the same pattern again for a while, tires of patterns that come too thick, and pays only for what it can actually fold into white.
+
+When the crystal is nearly all white on still water, or every pit of a full cluster is filled, the cycle ends: the cluster falls into the lens it bent and leaves one drop. Touch the drop and the next cycle grows, in other colours.
 
 Draw a circle on the liquid and it holds for a moment. A pair born inside it is observed by the circle itself and cannot get out; it rings against the edge, and when the circle fades both drops fall in together as an entangled pair of qubits, joined by a string of light. The strings tremble with every breath and can be plucked: a long one sounds low, a short one high. Send one of an entangled pair under and the other follows at once.
 

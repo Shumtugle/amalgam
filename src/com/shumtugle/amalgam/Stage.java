@@ -154,7 +154,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             Save.State r = restore;
             restore = null;
             world = new World(COLS, aspect, r != null ? r.seed : SystemClock.elapsedRealtime());
-            if (r != null && r.planted) world.restore(r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away);
+            if (r != null && r.planted) world.restore(r.generation, r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away);
+            else if (r != null) world.between(r.generation, r.resonance);
         }
         Liquid lq = world.liquid;
         fieldOut = ByteBuffer.allocateDirect(lq.texels.length).order(ByteOrder.nativeOrder());
@@ -237,10 +238,10 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         if (world.planted()) {
             glowU = world.crystalU();
             glowV = world.crystalV();
-            glow = 0.4f + 0.6f * world.pulse + world.flash;
+            glow = 0.4f + 0.6f * world.pulse + world.flash + 2f * world.collapseLevel();
         }
         GLES30.glUniform4f(loc(glass, "uGlow"), glowU, glowV, glow, world.aspect);
-        GLES30.glUniform1f(loc(glass, "uFilm"), 0f);
+        GLES30.glUniform1f(loc(glass, "uFilm"), world.filmShift());
         GLES30.glUniform1f(loc(glass, "uLens"), world.lens());
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, triBuf);
         GLES30.glEnableVertexAttribArray(0);
@@ -329,7 +330,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniform3f(loc(crystal, "uEye"), eye[0], eye[1], eye[2]);
         GLES30.glUniform1f(loc(crystal, "uPulse"), world.pulse);
         GLES30.glUniform1f(loc(crystal, "uFlash"), world.flash);
-        GLES30.glUniform1f(loc(crystal, "uFilm"), 0f);
+        GLES30.glUniform1f(loc(crystal, "uFilm"), world.filmShift());
         GLES30.glUniform1f(loc(crystal, "uEntropy"), world.entropy);
         GLES30.glUniform1f(loc(crystal, "uTime"), world.time % 1000f);
         drawMesh(settledBuf, settledVerts);

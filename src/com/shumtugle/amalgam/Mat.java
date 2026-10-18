@@ -48,6 +48,18 @@ final class Mat {
         m[14] = cz - (-s * cx + c * cz);
     }
 
+    /** Rotation around the y axis and a uniform scale, both about the point (cx, cy, cz). */
+    static void spinScaleAround(float[] m, float angle, float scale, float cx, float cy, float cz) {
+        float c = (float) Math.cos(angle) * scale, s = (float) Math.sin(angle) * scale;
+        identity(m);
+        m[0] = c; m[8] = s;
+        m[2] = -s; m[10] = c;
+        m[5] = scale;
+        m[12] = cx - (c * cx + s * cz);
+        m[13] = cy - scale * cy;
+        m[14] = cz - (-s * cx + c * cz);
+    }
+
     /** out = a * b; out must not alias either input. */
     static void mul(float[] out, float[] a, float[] b) {
         for (int c = 0; c < 4; c++)

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8 — 2026-10-18
+
+The price of order, and the end of a cycle.
+
+- A heard pattern lowers disorder only by what it actually folds into white: 0.1 for each qubit fused. With nothing to fuse it is sung back and changes nothing.
+- The world tires of patterns as a whole, not only of each one: every pattern heard soon after another is worth less, and the weariness fades over minutes.
+- A cycle ends when the crystal is nearly all white on still water, or when every pit of a full cluster holds a qubit. The cluster spins faster, shrinks into the lens it bent and is gone, leaving a single drop.
+- A touch on the drop begins the next cycle, with every colour shifted.
+- The cycle count is saved; a collapse interrupted by closing the game counts as finished.
+
 ## 0.7 — 2026-10-18
 
 Strings.

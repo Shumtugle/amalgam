@@ -206,6 +206,20 @@ public final class MainActivity extends Activity {
                 sound.pluck(w.pluckPitch, 0.5f);
                 tick();
                 break;
+            case World.EV_COLLAPSE: {
+                // the cluster falls in: the scale runs down, then the deepest bell
+                float at = 0f;
+                for (int i = 9; i >= 0; i--, at += 0.42f)
+                    sound.strikeLater(SCALE[i % SCALE.length] * (i >= SCALE.length ? 2f : 1f), 0.3f, 1.4f, at);
+                sound.strikeLater(LOW, 1f, 3f, World.COLLAPSE_TIME - 0.05f);
+                thump(true);
+                break;
+            }
+            case World.EV_SINGULARITY:
+                sound.strike(LOW * 1.5f, 0.6f, 3f);
+                sound.strike(LOW * 2f, 0.4f, 3f);
+                thump(true);
+                break;
             case World.EV_BREATH:
                 // the breath must be heard, or nobody can look on it
                 sound.strike(LOW, 0.16f, 0.6f);
