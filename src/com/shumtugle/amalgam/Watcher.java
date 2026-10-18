@@ -7,17 +7,17 @@ import java.util.Random;
  * follows the solution below, line by line, and nothing else:
  *
  * 1. Touch the water once to plant the crystal.
- * 2. Where the drops are plain quicksilver, look at drops only on the breath; repeat the sides
- *    of your last three looks until the world sings them back.
+ * 2. Read the colour under you and speak its language, a word of three and then the same three
+ *    again, until the world sings it back. Clear: look at drops on the breath. Lilac, violet,
+ *    red: draw circles on still water until two strings stretch between qubits, then pluck them
+ *    on the breath. Light blue, blue: send hoppers under on the breath. Lime: circle the glints
+ *    that tremble between breaths. Off clear, while fewer than four qubits have come since the
+ *    newest white one, look at drops between words: it feeds the crystal, and only clear hears it.
  * 3. Cut the world with one straight stroke from edge to edge, beside the crystal or through
- *    it; the side holding less of the crystal falls away.
- * 4. Read the new colour. Lilac, violet or red listen to strings: if fewer than two strings
- *    stretch between qubits, draw a circle on still water away from the crystal and wait for it
- *    to catch a pair, until there are two; then pluck three strings in turn, each on a breath,
- *    and the same three again. Any other colour: as in step 2.
- * 5. Once two surfaces have sung back: if the one under you listens to strings, cut once more.
- *    Then look at drops on the breath, repeating your sides, until the crystal falls in.
- * 6. Turn the drop it leaves, round and round, until it has swallowed the world.
+ *    it; the side holding less of the crystal falls away. Then step 2 on the new colour.
+ * 4. Once three surfaces have sung back, go on speaking the language under you until the
+ *    crystal falls in.
+ * 5. Turn the drop it leaves, round and round, until it has swallowed the world.
  *
  * It touches the world through the same calls a finger does.
  */
@@ -75,15 +75,20 @@ final class Watcher {
                 phase = LISTEN;
                 break;
             default:
-                boolean both = Integer.bitCount(w.layersHeard) >= 2;
-                if ((heardHere() && !both) || (both && World.listensToStrings(w.layer))) {
-                    // step 3, or step 5 on a surface of strings: cut to the next one
+                boolean enough = Integer.bitCount(w.layersHeard) >= World.SURFACES_TO_END;
+                if (heardHere() && !enough) {
+                    // step 3: the world has sung back here; cut to the next colour
                     planCut();
                     phase = CUTTING;
-                } else if (World.listensToStrings(w.layer)) {
-                    strings(dt);
-                } else {
-                    sides();
+                    break;
+                }
+                // steps 2 and 4: speak the language under you, and feed the crystal between words
+                if (World.language(w.layer) != World.LOOKS && feed(dt)) break;
+                switch (World.language(w.layer)) {
+                    case World.STRINGS: strings(dt); break;
+                    case World.SPIRALS: sinks(); break;
+                    case World.GLINTS: glints(); break;
+                    default: sides(); break;
                 }
                 break;
         }
@@ -140,21 +145,54 @@ final class Watcher {
         }
     }
 
-    /** Steps 2 and 5 on surfaces that hear sides: on the breath, the side the run asks for. */
+    /**
+     * The side the word asks for next: the one heard three symbols ago, so the last three come
+     * round again; -1 when anything will do, at the start of a word or when it has gone stale.
+     */
+    private int wantSide() {
+        Listener l = w.listener;
+        int run = l.length();
+        if (run < 3) return -1;
+        int want = l.at(run - 3) >> 1;
+        boolean same = l.at(run - 1) >> 1 == l.at(run - 2) >> 1 && l.at(run - 2) >> 1 == l.at(run - 3) >> 1;
+        return same || run > 9 ? -1 : want;
+    }
+
+    private float feedWait;
+
+    /**
+     * Between breaths, a look at a drop that is not part of any word, while too little colour
+     * is left in the crystal for the next word to fold.
+     */
+    private boolean feed(float dt) {
+        feedWait -= dt;
+        if (feedWait > 0f || Math.abs(w.fromBeat()) < 0.7f) return false;
+        // a word folds the newest qubits; with too few since the last white, it folds that too
+        Crystal c = w.crystal;
+        int fresh = 0;
+        for (int i = c.qubits - 1; i >= 0; i--) {
+            if (!c.realQubit(i)) continue;
+            if (c.hues[i] > 1.5f) break;
+            fresh++;
+        }
+        if (fresh >= 4) return false;
+        int pd = w.pairDrops();
+        if (pd == 0) return false;
+        w.drops(drops);
+        int k = rnd.nextInt(pd);
+        feedWait = 1.2f + rnd.nextFloat();
+        w.touchAs(drops[k * 8], drops[k * 8 + 1]);
+        return true;
+    }
+
+    /** Clear: on the breath, look at a drop on the side the word asks for. */
     private void sides() {
         int beat = breath();
         if (beat < 0) return;
         int pd = w.pairDrops();
         if (pd == 0) return;
         w.drops(drops);
-        Listener l = w.listener;
-        int run = l.length();
-        int want = -1;
-        if (run >= 3) {
-            want = l.at(run - 3) >> 1;
-            boolean same = l.at(run - 1) >> 1 == l.at(run - 2) >> 1 && l.at(run - 2) >> 1 == l.at(run - 3) >> 1;
-            if (same || run > 9) want = -1;
-        }
+        int want = wantSide();
         int pick = -1;
         for (int k = 0; k < pd; k++) {
             if (want < 0 || side(drops[k * 8], drops[k * 8 + 1]) == want) { pick = k; break; }
@@ -166,6 +204,74 @@ final class Watcher {
         waited = 0;
         lastBeat = beat;
         w.touchAs(drops[pick * 8], drops[pick * 8 + 1]);
+    }
+
+    /** Light blue and blue: on the breath, send under a hopper on the side the word asks for. */
+    private void sinks() {
+        int beat = breath();
+        if (beat < 0) return;
+        Crystal c = w.crystal;
+        int under = 0;
+        for (int i = 0; i < c.hoppers.size(); i++) if (c.hoppers.get(i).under) under++;
+        if (under >= Crystal.MAX_UNDER) { lastBeat = beat; return; }
+        int want = wantSide();
+        int pick = -1, spare = -1;
+        float[] at = null, spareAt = null;
+        int n = c.hoppers.size(), from = rnd.nextInt(n);
+        for (int k = 0; k < n; k++) {
+            int i = (from + k) % n;
+            Crystal.Hopper h = c.hoppers.get(i);
+            if (h == c.active || h.under || h.sink > 0f || h.lost || c.entangled(i)) continue;
+            float[] p = w.project(h.cx(), h.cy(), h.cz());
+            if (p == null || dropNear(p[0], p[1])) continue;
+            int sd = w.sideOf(i);
+            if (want < 0 || sd == want) { pick = i; at = p; break; }
+            if (spare < 0) { spare = i; spareAt = p; }
+        }
+        if (pick < 0) {
+            if (++waited < 3 || spare < 0) { lastBeat = beat; return; }
+            at = spareAt;
+        }
+        waited = 0;
+        lastBeat = beat;
+        w.touchAs(at[0], at[1]);
+    }
+
+    // glints let go on purpose, by the moment each lit up, so they are not taken after all
+    private final float[] passed = new float[World.MAX_GLINTS];
+
+    /** Lime: a quick circle round a fresh glint on the side the word asks for. */
+    private void glints() {
+        int want = wantSide();
+        int pick = -1, spare = -1;
+        int from = rnd.nextInt(World.MAX_GLINTS);
+        for (int k = 0; k < World.MAX_GLINTS; k++) {
+            int g = (from + k) % World.MAX_GLINTS;
+            if (!w.gon[g] || w.gage[g] > 1.2f) continue;
+            if (Math.abs(w.time - w.gage[g] - passed[g]) < 0.01f) continue;
+            int sd = World.quarter(w.gx[g] - w.crystalU(), w.gy[g] - w.crystalV() * w.aspect);
+            if (want < 0 || sd == want) { pick = g; break; }
+            if (spare < 0) spare = g;
+        }
+        if (pick < 0) {
+            if (spare < 0) return;
+            if (++waited < 3) {
+                // let this one go and wait for another
+                passed[spare] = w.time - w.gage[spare];
+                return;
+            }
+            pick = spare;
+        }
+        waited = 0;
+        float r = 0.085f, cx = w.gx[pick], cy = w.gy[pick];
+        float a0 = rnd.nextFloat() * 6.2832f;
+        pathN = 26;
+        for (int i = 0; i < pathN; i++) {
+            float a = a0 + i / 22f * 6.2832f;
+            pathU[i] = cx + (float) Math.cos(a) * r;
+            pathV[i] = (cy + (float) Math.sin(a) * r) / w.aspect;
+        }
+        pathAt = 0;
     }
 
     /**

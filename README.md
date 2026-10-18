@@ -10,13 +10,13 @@ A hopper grows as a frame round nothing: every finished one opens an empty pit. 
 
 Everything drifts towards disorder: more pairs, a trembling surface, a string out of tune. The way back is a pattern. The world listens to the order in which you look, which side of the crystal and whether on the breath; when a short run repeats, it sings it back, folds the newest qubits into one white one and grows quiet again. It does not reward the same pattern again for a while, tires of patterns that come too thick, and pays only for what it can actually fold into white.
 
-When the crystal is nearly all white on still water, or every pit of a full cluster is filled, the cycle ends: the cluster falls into the lens it bent and leaves one drop. Touch the drop and the next cycle grows, in other colours. Leave it alone for fifteen seconds and it melts away: black peace, the one ending reached by not touching, and the world starts over.
+When the crystal is half white on still water, or every pit of a full cluster is filled, the cycle ends: the cluster falls into the lens it bent and leaves one drop. Touch the drop and the next cycle grows, in other colours. Leave it alone for fifteen seconds and it melts away: black peace, the one ending reached by not touching, and the world starts over.
 
 Draw a circle on the liquid and it holds for a moment. A pair born inside it is observed by the circle itself and cannot get out; it rings against the edge, and when the circle fades both drops fall in together as an entangled pair of qubits, joined by a string of light. The strings tremble with every breath and can be plucked: a long one sounds low, a short one high. Send one of an entangled pair under and the other follows at once.
 
-The black is deep. A touch on a hopper sends it under, and it rises again half a turn later. Sometimes, on an event or for no reason, deep space shows through the liquid for a few seconds: a jump to light speed, a supernova, a lava world, a nebula, galaxies.
+The black is deep. A touch on a hopper sends it under, and it rises again half a turn later, or much sooner on the surfaces that hear it. Sometimes, on an event or for no reason, deep space shows through the liquid for a few seconds: a jump to light speed, a supernova, a lava world, a nebula, galaxies.
 
-The world has layers. One straight stroke from edge to edge cuts it in two, crystal and all: the piece holding less of the crystal falls away for good, with every drop on it and every hopper beyond the cut, and what the cut passes through keeps a flat face of bare metal. The piece that stays turns over on the cut until its edge faces you and shows the strata beneath, and the next surface spreads out from the cut. The surfaces come in turn: clear, lilac, light blue, lime, violet, blue, red, and clear again; the drops take the colour of the surface they rise from. Each surface hears a different language. Lilac, violet and red do not listen to where you look but to the strings: pluck them on the breath in an order and repeat it. A cycle will not end until two different surfaces have sung back, so the world has to be cut at least once.
+The world has layers. One straight stroke from edge to edge cuts it in two, crystal and all: the piece holding less of the crystal falls away for good, with every drop on it and every hopper beyond the cut, and what the cut passes through keeps a flat face of bare metal. The piece that stays turns over on the cut until its edge faces you and shows the strata beneath, and the next surface spreads out from the cut. The surfaces come in turn: clear, lilac, light blue, lime, violet, blue, red, and clear again; the drops take the colour of the surface they rise from. Each surface hears a different language, one for every thing a finger can do. Clear hears where you look. Lilac, violet and red hear the strings: pluck them on the breath in an order and repeat it. Light blue and blue hear where you send hoppers under; there they spiral back up within moments. Lime hears glints: between breaths small lights tremble on the water, and a circle drawn round one catches it. A word is always the side of the crystal and whether it came on the breath, three of them and the same three again. Looking at drops feeds the crystal everywhere, but only clear hears it. A cycle will not end until three different surfaces have sung back, the one under you among them, so the world has to be cut at least twice.
 
 Press back and an eye opens in the corner. Touch it, and the game plays itself while you watch.
 
@@ -28,7 +28,6 @@ There are no numbers on the screen. What you have gathered is heard, not read: a
 
 The game remembers the crystal when closed, and it grows a little while you are away.
 
-Spirals and trembling glints, the languages of the other surfaces, come later; for now those surfaces listen as the clear one does.
 
 ## How it is made
 

@@ -32,14 +32,15 @@ final class World {
             EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15,
             EV_PLUCK = 16, EV_COLLAPSE = 17, EV_SINGULARITY = 18,
             EV_PEACE = 19, EV_EYE = 20, EV_WATCH = 21, EV_RETURN = 23,
-            EV_CUT = 24, EV_LAYER = 25, EV_TURN = 26, EV_SPIN = 27, EV_SWALLOW = 28;
+            EV_CUT = 24, EV_LAYER = 25, EV_TURN = 26, EV_SPIN = 27, EV_SWALLOW = 28, EV_GLINT = 29;
 
     /**
-     * Surfaces. A straight stroke from edge to edge cuts the world in two: the smaller piece falls
-     * away for good, with whatever of the crystal was in it, and the cut face shows the next
-     * surface down. Surfaces come round in order, each with its own colour and its own way of
-     * listening. Clear ones hear which side of the crystal you look at; lilac, violet and red
-     * hear which strings you pluck on the breath.
+     * Surfaces. A straight stroke from edge to edge cuts the world in two: the piece holding less
+     * of the crystal falls away for good, and the cut face shows the next surface down. Surfaces
+     * come round in order, each with its own colour and its own language, one for every verb:
+     * clear hears where you look; lilac, violet and red hear which strings you pluck; light blue
+     * and blue hear where you send hoppers under, as they spiral back up; lime hears the glints
+     * you catch in a circle. A word is the side of the crystal and whether it came on the breath.
      */
     static final int LAYERS = 7;
     static final float[][] TINT = {
@@ -66,9 +67,36 @@ final class World {
     volatile boolean pictured;
     private boolean cutSpent;
 
-    static boolean listensToStrings(int layer) {
-        return layer == 1 || layer == 4 || layer == 6;
+    static final int LOOKS = 0, STRINGS = 1, SPIRALS = 2, GLINTS = 3;
+
+    /** The language a surface hears. */
+    static int language(int layer) {
+        switch (layer) {
+            case 1: case 4: case 6: return STRINGS;
+            case 2: case 5: return SPIRALS;
+            case 3: return GLINTS;
+            default: return LOOKS;
+        }
     }
+
+    static boolean listensToStrings(int layer) {
+        return language(layer) == STRINGS;
+    }
+
+    /** Surfaces that must have sung back before a cycle can end. */
+    static final int SURFACES_TO_END = 3;
+
+    /**
+     * Glints: on lime, between breaths, small lights tremble on the water here and there. A
+     * circle drawn round one catches it, and the world hears where it was.
+     */
+    static final int MAX_GLINTS = 3;
+    static final float GLINT_LIFE = 2.2f;
+    final float[] gx = new float[MAX_GLINTS], gy = new float[MAX_GLINTS], gage = new float[MAX_GLINTS];
+    final boolean[] gon = new boolean[MAX_GLINTS];
+    private int glintBeat = -1;
+    /** Index of the first glint in the last list drops() wrote. */
+    int glintsFrom;
 
     /** Whether strings show on this surface: on clear ones and on those that listen to them. */
     boolean stringsShown() {
@@ -559,6 +587,7 @@ final class World {
         for (int j = 0; j < MAX_FLYERS; j++)
             if (fon[j] && (fx[j] - x) * nx + (fy[j] - y) * ny > 0f) fon[j] = false;
         ringOn = false;
+        for (int g = 0; g < MAX_GLINTS; g++) gon[g] = false;
         // The line on the glass is a plane through the eye. On screen a point of the cluster is
         // at u = (X / W + shift.x) / 2 + 1 / 2, v likewise, where X, Y, W are rows of the camera
         // matrix applied to it; the side test, times W, is linear in the point.
@@ -660,9 +689,54 @@ final class World {
             ringAge = 0f;
             ringKeep = 0f;
             event(EV_RING);
+            catchGlints(cx, cy, mean);
             return true;
         }
         return false;
+    }
+
+    /** On lime, a circle closed round glints catches them, and the world hears where they were. */
+    private void catchGlints(float cx, float cy, float r) {
+        if (language(layer) != GLINTS || crystal == null) return;
+        boolean onBeat = Math.abs(fromBeat()) <= WINDOW;
+        for (int g = 0; g < MAX_GLINTS; g++) {
+            if (!gon[g]) continue;
+            float dx = gx[g] - cx, dy = gy[g] - cy;
+            if (dx * dx + dy * dy > r * r * 1.1f) continue;
+            gon[g] = false;
+            liquid.press(gx[g], gy[g] / aspect, 2f, 0.4f);
+            event(EV_GLINT);
+            int n = listener.hear(Listener.symbol(quarter(gx[g] - crystalX(), gy[g] - crystalY()), onBeat), time);
+            if (n > 0) heard(n);
+        }
+    }
+
+    /** Between breaths on lime, glints light up on the water; each trembles a while and goes out. */
+    private void updateGlints(float dt) {
+        for (int g = 0; g < MAX_GLINTS; g++) {
+            if (!gon[g]) continue;
+            gage[g] += dt;
+            if (gage[g] >= GLINT_LIFE) gon[g] = false;
+        }
+        if (language(layer) != GLINTS) return;
+        // halfway between two breaths, once a breath
+        int beat = (int) Math.floor((time - beatStart) / BEAT + 0.5f);
+        if (fromBeat() < BEAT * 0.3f || beat == glintBeat) return;
+        glintBeat = beat;
+        int want = 1 + (rnd.nextFloat() < 0.4f ? 1 : 0);
+        for (int g = 0; g < MAX_GLINTS && want > 0; g++) {
+            if (gon[g]) continue;
+            for (int tries = 0; tries < 12; tries++) {
+                float x = 0.12f + 0.76f * rnd.nextFloat(), y = (0.1f + 0.8f * rnd.nextFloat()) * aspect;
+                if (!roomFor(x, y)) continue;
+                gx[g] = x;
+                gy[g] = y;
+                gage[g] = 0f;
+                gon[g] = true;
+                want--;
+                break;
+            }
+        }
     }
 
     /** A touch on a string plucks it; it sounds lower the longer it is. */
@@ -724,7 +798,31 @@ final class World {
         liquid.press(u, v, 3.5f, 1.4f);
         event(EV_SINK);
         maybeVision(LAVA, 0.5f);
+        if (language(layer) == SPIRALS) {
+            // light blue and blue hear where a hopper went under; an entangled partner goes
+            // with it at once, and is heard too
+            boolean onBeat = Math.abs(fromBeat()) <= WINDOW;
+            int n = listener.hear(Listener.symbol(sideOf(best), onBeat), time);
+            if (n > 0) heard(n);
+            else if (crystal.entangled(best)) {
+                n = listener.hear(Listener.symbol(sideOf(crystal.partner[best]), onBeat), time);
+                if (n > 0) heard(n);
+            }
+        }
         return true;
+    }
+
+    /** Which side of the crystal hopper i shows on, as the world hears it. */
+    int sideOf(int i) {
+        Crystal.Hopper h = crystal.hoppers.get(i);
+        float[] c = project(h.cx(), h.cy(), h.cz());
+        if (c == null) return 0;
+        return quarter(c[0] - crystalX(), c[1] * aspect - crystalY());
+    }
+
+    /** The side of the crystal for an offset from its middle: 0 above, 1 right, 2 below, 3 left. */
+    static int quarter(float sx, float sy) {
+        return Math.abs(sx) > Math.abs(sy) ? (sx > 0 ? 1 : 3) : (sy > 0 ? 0 : 2);
     }
 
     /** Screen position of a point of the cluster: u, v and the depth term w; null if behind. */
@@ -778,7 +876,7 @@ final class World {
             beatStreak = 0;
             maybeVision(STAR, 0.7f);
         }
-        if (!listensToStrings(layer)) {
+        if (language(layer) == LOOKS) {
             int n = listener.hear(Listener.symbol(quarter, onBeat), time);
             if (n > 0) heard(n);
         }
@@ -840,8 +938,9 @@ final class World {
 
     /** Whether the cycle is over: a white crust on still water, or a cluster with every pit full. */
     private boolean collapseDue() {
-        // a cycle cannot end until the world has heard you on two different surfaces
-        if (Integer.bitCount(layersHeard) < 2) return false;
+        // a cycle cannot end until the world has heard you on three different surfaces, the one
+        // under you among them
+        if (Integer.bitCount(layersHeard) < SURFACES_TO_END || (layersHeard & (1 << layer)) == 0) return false;
         int real = 0, white = 0, standing = 0;
         for (int i = 0; i < crystal.qubits; i++) {
             if (!crystal.realQubit(i)) continue;
@@ -852,13 +951,14 @@ final class World {
             Crystal.Hopper h = crystal.hoppers.get(i);
             if (!h.lost && h != crystal.active) standing++;
         }
-        boolean order = real >= 10 && white >= real * 0.75f && entropy < 0.1f;
+        boolean order = real >= 10 && white >= real * 0.5f && entropy < 0.1f;
         boolean full = crystal.active == null && standing >= 12 && real >= standing;
         return order || full;
     }
 
     private void beginCollapse() {
         collapse = 0f;
+        for (int g = 0; g < MAX_GLINTS; g++) gon[g] = false;
         for (int i = 0; i < MAX_PAIRS; i++) pon[i] = false;
         for (int j = 0; j < MAX_FLYERS; j++) fon[j] = false;
         ringOn = false;
@@ -1031,7 +1131,8 @@ final class World {
             }
         }
 
-        int rose = crystal.updateSinking(dt, spin);
+        // on the surfaces that hear sinking, hoppers spiral back up sooner: a word needs them
+        int rose = crystal.updateSinking(dt, spin, language(layer) == SPIRALS ? 0.7f : (float) Math.PI);
         if (rose >= 0) {
             Crystal.Hopper h = crystal.hoppers.get(rose);
             float[] c = project(h.cx(), h.cy(), h.cz());
@@ -1068,6 +1169,7 @@ final class World {
 
         updatePairs(dt);
         updateFlyers(dt);
+        updateGlints(dt);
 
         pool += TRICKLE * dt;
         float use = Math.min(pool, GROWTH_RATE * dt);
@@ -1414,6 +1516,25 @@ final class World {
             out[o + 7] = stretch;
             n++;
         }
+        // glints last: small, trembling, coming and going
+        glintsFrom = n;
+        for (int g = 0; g < MAX_GLINTS; g++) {
+            if (!gon[g]) continue;
+            float t = gage[g] / GLINT_LIFE;
+            float life = Math.min(1f, t * 6f) * Math.min(1f, (1f - t) * 4f);
+            float shake = 0.75f + 0.25f * (float) Math.sin(time * 23f + g * 5.1f);
+            float turn = time * 7f + g * 2.3f + 0.6f * (float) Math.sin(time * 31f + g);
+            int o = n * 8;
+            out[o] = gx[g] + 0.004f * (float) Math.sin(time * 41f + g);
+            out[o + 1] = gy[g] / aspect;
+            out[o + 2] = 0.03f * (0.8f + 0.3f * shake);
+            out[o + 3] = life * shake;
+            out[o + 4] = 0f;
+            out[o + 5] = (float) Math.cos(turn);
+            out[o + 6] = (float) Math.sin(turn);
+            out[o + 7] = 2.6f;
+            n++;
+        }
         return n;
     }
 
@@ -1425,7 +1546,7 @@ final class World {
     }
 
     static int maxDrops() {
-        return MAX_PAIRS * 2 + MAX_FLYERS;
+        return MAX_PAIRS * 2 + MAX_FLYERS + MAX_GLINTS + 1;
     }
 
     /** How much crystal there is: the string thickens with it and space bends round it. */

@@ -13,6 +13,16 @@ uniform float uDark;   // the black world growing inside the drop a collapse lea
 void main() {
     float d2 = dot(vLocal, vLocal);
     if (d2 > 1.0) discard;
+    if (uDark < 0.0) {
+        // a glint: a hot point of light with a short flare across it, in the surface's colour
+        float core = exp(-d2 * 6.0);
+        float halo = exp(-d2 * 2.0) * 0.35;
+        float flare = exp(-abs(vLocal.y) * 10.0) * (1.0 - smoothstep(0.3, 1.0, abs(vLocal.x)));
+        vec3 c = mix(vec3(1.0), uLayer, 0.55) * (core * 2.6 + flare * 1.2 + halo);
+        float ga = clamp(core + flare * 0.8 + halo, 0.0, 1.0) * uAlpha;
+        o = vec4(tonemap(c), ga);
+        return;
+    }
     // local frame back to screen frame
     vec2 side = vec2(-uDir.y, uDir.x);
     vec2 p = uDir * vLocal.x + side * vLocal.y;

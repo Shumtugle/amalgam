@@ -638,7 +638,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             GLES30.glUniform1f(film, drops[o + 4]);
             GLES30.glUniform2f(dir, drops[o + 5], drops[o + 6]);
             GLES30.glUniform1f(stretch, drops[o + 7]);
-            GLES30.glUniform1f(dark, i == 0 ? dropDark : 0f);
+            // a negative darkness tells the shader it is a glint, not a drop
+            GLES30.glUniform1f(dark, i >= world.glintsFrom ? -1f : i == 0 ? dropDark : 0f);
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
         }
         GLES30.glDisable(GLES30.GL_BLEND);

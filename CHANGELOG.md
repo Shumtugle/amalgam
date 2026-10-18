@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3 — 2026-10-18
+
+Every verb has a surface.
+
+- Light blue and blue hear sinking: send hoppers under on the breath, and the side of the crystal each went under on is the word. An entangled partner goes under with it and is heard too. On these surfaces hoppers spiral back up within seconds instead of half a turn.
+- Lime hears glints: between breaths small trembling lights come up on the water; a circle drawn round one catches it, and the side it was on is the word.
+- Looks are heard only on clear now. Looking at drops still feeds the crystal everywhere.
+- A cycle ends only after three different surfaces have sung back, the one under you among them. The white crust that ends it needs half the crystal white, not three quarters.
+- Up to ten hoppers can be under at once.
+- The eye speaks every language: it sinks, catches glints, plucks and looks, and feeds the crystal between words when there is too little colour left to fold.
+
 ## 1.2.2 — 2026-10-18
 
 - The eye's game ends differently.

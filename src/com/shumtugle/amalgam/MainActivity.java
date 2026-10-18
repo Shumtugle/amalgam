@@ -253,6 +253,11 @@ public final class MainActivity extends Activity {
                 sound.strikeLater(LOW * 3f, 0.25f, 2f, 0.3f);
                 thump(false);
                 break;
+            case World.EV_GLINT:
+                // a glint caught: a small bright chime
+                sound.strike(SCALE[3] * 4f, 0.09f, 0.7f);
+                sound.strikeLater(SCALE[4] * 4f, 0.06f, 0.6f, 0.08f);
+                break;
             case World.EV_SPIN:
                 // each quarter turn of the drop a little higher
                 sound.strike(SCALE[w.dropGrow < 0.5f ? 2 : 4] * (1f + w.dropGrow), 0.07f, 0.8f);

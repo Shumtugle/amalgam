@@ -498,7 +498,7 @@ final class Crystal {
     }
 
     /** Most hoppers allowed under at once, so the cluster never empties. */
-    static final int MAX_UNDER = 6;
+    static final int MAX_UNDER = 10;
 
     /** Sends a finished hopper under the surface. Returns false if it cannot go. */
     boolean submerge(int i, float spin) {
@@ -527,14 +527,15 @@ final class Crystal {
     }
 
     /**
-     * Moves hoppers under and back. Returns the index of a hopper that has just started to
-     * come back up after half a turn, or -1.
+     * Moves hoppers under and back. A hopper comes back up once the cluster has turned by
+     * riseAfter radians since it went under. Returns the index of a hopper that has just
+     * started to come back up, or -1.
      */
-    int updateSinking(float dt, float spin) {
+    int updateSinking(float dt, float spin, float riseAfter) {
         int rose = -1;
         for (int i = 0; i < hoppers.size(); i++) {
             Hopper h = hoppers.get(i);
-            if (h.under && spin - h.underSpin >= (float) Math.PI) {
+            if (h.under && spin - h.underSpin >= riseAfter) {
                 h.under = false;
                 rose = i;
             }
