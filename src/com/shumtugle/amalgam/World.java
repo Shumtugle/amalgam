@@ -30,7 +30,17 @@ final class World {
     static final int EV_PLANT = 1, EV_OBSERVE = 2, EV_OBSERVE_ON_BEAT = 3, EV_MISS = 4,
             EV_ABSORB = 5, EV_BREATH = 6, EV_SETTLED = 7, EV_QUBIT = 8, EV_PATTERN = 9,
             EV_SINK = 10, EV_SURFACE = 11, EV_VISTA = 12, EV_RING = 13, EV_BOUNCE = 14, EV_ENTANGLE = 15,
-            EV_PLUCK = 16, EV_COLLAPSE = 17, EV_SINGULARITY = 18;
+            EV_PLUCK = 16, EV_COLLAPSE = 17, EV_SINGULARITY = 18,
+            EV_PEACE = 19;
+
+    /**
+     * Left alone, the drop a collapse leaves fades and is gone: the black of before the first
+     * touch. It is the one ending reached by not touching. Everything starts over from it.
+     */
+    static final float DROP_WAIT = 15f, DROP_FADE = 3f;
+    private float dropAge;
+    /** How many times the world has gone back to black; every return grows a different crystal. */
+    int epoch;
 
     /**
      * The end of a cycle. When the crystal is nearly all white and the water still, or when every
@@ -179,7 +189,7 @@ final class World {
     }
 
     private void plant(float u, float v) {
-        crystal = new Crystal(seed + generation * 7919L);
+        crystal = new Crystal(seed + generation * 7919L + epoch * 104729L);
         dropLeft = false;
         mid[0] = 0f; mid[1] = 0.5f; mid[2] = 0f;
         across = 1.2f;
@@ -195,9 +205,10 @@ final class World {
      * Brings back a saved game. Away is how long the game was closed, in seconds;
      * the crystal grew a little by itself meanwhile.
      */
-    void restore(int gen, float u, float v, int settled, float grown, float[] hues, int[] partners, float savedEntropy,
+    void restore(int gen, int savedEpoch, float u, float v, int settled, float grown, float[] hues, int[] partners, float savedEntropy,
                  float savedPool, float savedResonance, float away) {
         generation = gen;
+        epoch = savedEpoch;
         plant(u, v);
         crystal.restore(settled, grown, hues, partners);
         entropy = Math.max(0f, Math.min(1f, savedEntropy));
@@ -211,8 +222,9 @@ final class World {
     }
 
     /** A saved game between cycles: the drop of the last collapse waits in the middle. */
-    void between(int gen, float savedResonance) {
+    void between(int gen, int savedEpoch, float savedResonance) {
         generation = gen;
+        epoch = savedEpoch;
         resonance = savedResonance;
         dropLeft = gen > 0;
         dropX = 0.5f;
@@ -469,6 +481,17 @@ final class World {
         }
     }
 
+    /** The drop is gone. Nothing is left, not even the count of cycles. */
+    private void peace() {
+        dropLeft = false;
+        generation = 0;
+        resonance = 0f;
+        entropy = 0.1f;
+        epoch++;
+        liquid.press(dropX, dropY / aspect, 2f, 0.25f);
+        event(EV_PEACE);
+    }
+
     /** Whether the cycle is over: a white crust on still water, or a cluster with every pit full. */
     private boolean collapseDue() {
         int q = crystal.qubits, white = 0;
@@ -490,6 +513,7 @@ final class World {
         dropX = crystalX();
         dropY = crystalY();
         dropLeft = true;
+        dropAge = 0f;
         crystal = null;
         collapse = -1f;
         generation++;
@@ -559,7 +583,13 @@ final class World {
         time += dt;
         flash = Math.max(0f, flash - dt * 1.8f);
         weary *= (float) Math.exp(-dt / 150f);
-        if (crystal == null) return;
+        if (crystal == null) {
+            if (dropLeft) {
+                dropAge += dt;
+                if (dropAge >= DROP_WAIT) peace();
+            }
+            return;
+        }
 
         if (collapse >= 0f) {
             // falling in: the turn quickens, the surface is drawn towards the middle
@@ -945,9 +975,10 @@ final class World {
     int drops(float[] out) {
         int n = 0;
         if (dropLeft && crystal == null) {
-            // the one drop a collapse leaves; it breathes slowly while it waits
-            float r = DROP * (1.4f + 0.12f * (float) Math.sin(time * 2.4f));
-            out[0] = dropX; out[1] = dropY / aspect; out[2] = r; out[3] = 1f;
+            // the one drop a collapse leaves; it breathes slowly while it waits, then melts away
+            float left = Math.max(0f, Math.min(1f, (DROP_WAIT - dropAge) / DROP_FADE));
+            float r = DROP * (1.4f + 0.12f * (float) Math.sin(time * 2.4f)) * (0.3f + 0.7f * left);
+            out[0] = dropX; out[1] = dropY / aspect; out[2] = r; out[3] = left;
             out[4] = 200f + filmShift(); out[5] = 1f; out[6] = 0f; out[7] = 1f;
             n = 1;
         }

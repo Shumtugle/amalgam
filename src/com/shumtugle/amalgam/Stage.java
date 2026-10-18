@@ -154,8 +154,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             Save.State r = restore;
             restore = null;
             world = new World(COLS, aspect, r != null ? r.seed : SystemClock.elapsedRealtime());
-            if (r != null && r.planted) world.restore(r.generation, r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away);
-            else if (r != null) world.between(r.generation, r.resonance);
+            if (r != null && r.planted) world.restore(r.generation, r.epoch, r.u, r.v, r.settled, r.grown, r.hues, r.partners, r.entropy, r.pool, r.resonance, r.away);
+            else if (r != null) world.between(r.generation, r.epoch, r.resonance);
         }
         Liquid lq = world.liquid;
         fieldOut = ByteBuffer.allocateDirect(lq.texels.length).order(ByteOrder.nativeOrder());

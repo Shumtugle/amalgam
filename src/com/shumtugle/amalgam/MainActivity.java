@@ -220,6 +220,10 @@ public final class MainActivity extends Activity {
                 sound.strike(LOW * 2f, 0.4f, 3f);
                 thump(true);
                 break;
+            case World.EV_PEACE:
+                // the last sound: one faint high note, and then nothing
+                sound.strike(SCALE[4] * 2f, 0.08f, 2.5f);
+                break;
             case World.EV_BREATH:
                 // the breath must be heard, or nobody can look on it
                 sound.strike(LOW, 0.16f, 0.6f);
